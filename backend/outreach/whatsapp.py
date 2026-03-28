@@ -9,13 +9,13 @@ from typing import Optional
 from urllib.parse import quote
 from playwright.async_api import async_playwright
 
-WHATSAPP_SESSION_DIR = Path("config/sessions/whatsapp")
-WHATSAPP_SESSION_DIR.mkdir(parents=True, exist_ok=True)
+from backend.config.settings import settings
 
 
 class WhatsAppAutomation:
     def __init__(self):
-        self.session_path = WHATSAPP_SESSION_DIR
+        self.session_path = settings.sessions_dir / "whatsapp"
+        self.session_path.mkdir(parents=True, exist_ok=True)
         self.playwright = None
         self.context = None
         self.page = None

@@ -21,7 +21,7 @@ python scripts/run_scraper.py --city "Medellín" --category "gym" --limit 20
 ```
 
 ### Módulo 2: Generador (Lovable)
-Genera una demo (landing) en **Lovable.dev** a partir del prompt construido con los datos del prospecto (`src/generator/prompt_builder.py`). El flujo real usa Playwright con **perfil persistente** en `config/sessions/account_1` … `account_6` (rotación en `AccountManager`).
+Genera una demo (landing) en **Lovable.dev** a partir del prompt construido con los datos del prospecto (`backend/generator/prompt_builder.py`). El flujo real usa Playwright con **perfil persistente** en `data/sessions/account_1` … `data/sessions/account_6` (rotación en `AccountManager`).
 
 **Antes de automatizar:** inicia sesión en Lovable en ese perfil (la primera vez suele ser necesario `LOVABLE_HEADLESS=false` para ver el login).
 
@@ -48,14 +48,13 @@ python scripts/run_next_phases.py --execute
 ### Dashboard (React + Vite)
 Panel de prospectos, mapa y gestión de leads.
 
-**Producir build y levantar servidor:**
 ```bash
-cd src/dashboard/frontend-react
+cd frontend
 npm install
 npm run build
 
-cd ../../..
-uvicorn src.dashboard.backend.main:app --reload --port 8000
+cd ..
+uvicorn backend.main:app --reload --port 8000
 ```
 
 Abrir: **http://localhost:8000**
@@ -63,9 +62,9 @@ Abrir: **http://localhost:8000**
 **Desarrollo (frontend con hot reload):**
 ```bash
 # Terminal 1 – backend
-uvicorn src.dashboard.backend.main:app --reload --port 8000
+uvicorn backend.main:app --reload --port 8000
 
 # Terminal 2 – frontend
-cd src/dashboard/frontend-react && npm run dev
+cd frontend && npm run dev
 ```
-Frontend: **http://localhost:5173** (proxy de /api al backend en 8000)
+Abrir: **http://localhost:8000** (backend) o **http://localhost:5173** (frontend dev)

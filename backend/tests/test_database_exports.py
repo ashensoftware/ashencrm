@@ -2,13 +2,14 @@ import unittest
 import time
 from pathlib import Path
 
-from src.database.db import Database
-from src.scraper.models import Prospect
+from backend.database.db import Database
+from backend.config.settings import settings
+from backend.scraper.models import Prospect
 
 
 class TestDatabaseExports(unittest.TestCase):
     def setUp(self):
-        self.db_path = Path("data/test_exports.db")
+        self.db_path = settings.exports_dir / "test_exports.db"
         if self.db_path.exists():
             self.db_path.unlink()
         self.db = Database(db_path=self.db_path)
@@ -34,8 +35,8 @@ class TestDatabaseExports(unittest.TestCase):
                 time.sleep(0.1)
 
     def test_export_json_and_csv(self):
-        json_path = Path("data/test_export.json")
-        csv_path = Path("data/test_export.csv")
+        json_path = settings.exports_dir / "test_export.json"
+        csv_path = settings.exports_dir / "test_export.csv"
 
         if json_path.exists():
             json_path.unlink()

@@ -10,7 +10,7 @@ from backend.config.settings import settings
 
 
 async def main():
-    session_path = str(Path(__file__).parent.parent / "config/sessions/account_1")
+    session_path = str(settings.sessions_dir / "account_1")
     print(f"Abriendo sesión persistente en: {session_path }")
 
     async with async_playwright() as p:

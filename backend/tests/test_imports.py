@@ -8,9 +8,9 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 def test_imports():
-    from src.scraper.google_maps import GoogleMapsScraper
-    from src.scraper.instagram import InstagramChecker
-    from src.database.db import Database
+    from backend.scraper.google_maps import GoogleMapsScraper
+    from backend.scraper.instagram import InstagramChecker
+    from backend.database.db import Database
     from config.settings import settings
     
     db = Database()

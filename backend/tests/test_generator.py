@@ -4,10 +4,10 @@ Script de pruebas automáticas para el Módulo Generador.
 
 import unittest
 import asyncio
-from src.generator.prompt_builder import build_demo_prompt
-from src.generator.account_manager import AccountManager
-from src.generator.lovable import LovableAutomation
-from src.scraper.models import Prospect
+from backend.generator.prompt_builder import build_demo_prompt
+from backend.generator.account_manager import AccountManager
+from backend.generator.lovable import LovableAutomation
+from backend.scraper.models import Prospect
 
 class TestGeneratorModule(unittest.TestCase):
     

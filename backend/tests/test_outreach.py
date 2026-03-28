@@ -1,8 +1,8 @@
 import unittest
 
-from src.outreach.whatsapp import WhatsAppAutomation
-from src.outreach.message_builder import build_whatsapp_message
-from src.scraper.models import Prospect
+from backend.outreach.whatsapp import WhatsAppAutomation
+from backend.outreach.message_builder import build_whatsapp_message
+from backend.scraper.models import Prospect
 
 
 class TestOutreachModule(unittest.TestCase):

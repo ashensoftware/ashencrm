@@ -17,6 +17,7 @@ data/prospects.db
 data/screenshots/
 data/browser_data/
 data/exports/
+data/sessions/
 
 # Vite/React
 npm-debug.log*

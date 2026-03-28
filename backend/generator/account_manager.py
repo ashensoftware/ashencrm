@@ -7,14 +7,15 @@ import json
 from pathlib import Path
 from typing import List, Optional
 
-SESSIONS_DIR = Path("config/sessions")
+from backend.config.settings import settings
+
 ACCOUNTS_COUNT = 6
 
 
 class AccountManager:
     def __init__(self, count: int = ACCOUNTS_COUNT):
         self.count = count
-        self.sessions_dir = SESSIONS_DIR
+        self.sessions_dir = settings.sessions_dir
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         self.current_index_file = self.sessions_dir / "current_index.json"
 

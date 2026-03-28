@@ -81,7 +81,15 @@ export function AddProspectModal({ catalog, onClose, onSubmit }: Props) {
                     placeholder="usuario"
                     style={{ paddingLeft: "1.8rem" }}
                     value={form.instagram_handle || ""}
-                    onChange={(e) => setForm({ ...form, instagram_handle: e.target.value })}
+                    onChange={(e) => {
+                      let val = e.target.value;
+                      const handleMatch = val.match(/instagram\.com\/([^/?]+)/);
+                      if (handleMatch) {
+                        val = handleMatch[1];
+                      }
+                      val = val.replace(/^@/, '');
+                      setForm({ ...form, instagram_handle: val });
+                    }}
                   />
                 </div>
               </div>

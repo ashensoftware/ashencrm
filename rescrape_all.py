@@ -18,12 +18,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 from backend.scraper.google_maps import GoogleMapsScraper
 from backend.infrastructure.persistence.prospect_repository import ProspectRepository
 from backend.domain.prospect import Prospect
+from backend.config.settings import settings
 
-DB_PATH = Path("data/prospects.db")
+DB_PATH = settings.db_path
 
 # Categorías y cantidad de leads a scrapear por cada una
 SCRAPE_PLAN = [
-    ("cafe", "Medellín", 30),
+    ("cafe", "Medellín", 10),
     ("restaurante", "Medellín", 30),
     ("gimnasio", "Medellín", 25),
     ("barberia", "Medellín", 25),
@@ -90,7 +91,8 @@ async def run_scrape():
             phones = sum(1 for p in results if p.phone)
             websites = sum(1 for p in results if p.website)
             instagrams = sum(1 for p in results if p.instagram_url)
-            print(f"[CALIDAD]  Teléfonos: {phones}/{len(results)} | Webs: {websites}/{len(results)} | Instagram: {instagrams}/{len(results)}")
+            photos = sum(1 for p in results if p.screenshot_path)
+            print(f"[CALIDAD]  Tel: {phones}/{len(results)} | Web: {websites}/{len(results)} | IG: {instagrams}/{len(results)} | Foto: {photos}/{len(results)}")
 
         except Exception as e:
             print(f"[ERROR] {category}: {e}")

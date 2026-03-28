@@ -68,12 +68,13 @@ class Settings:
     data_dir: Path = PROJECT_ROOT / "data"
     screenshots_dir: Path = PROJECT_ROOT / "data" / "screenshots"
     browser_data_dir: Path = PROJECT_ROOT / "data" / "browser_data"
-    db_path: Path = PROJECT_ROOT / "data" / "prospects.db"
+    db_path: Path = PROJECT_ROOT / "data" / "db" / "prospects.db"
 
     def __post_init__(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
         self.browser_data_dir.mkdir(parents=True, exist_ok=True)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
 
 settings = Settings()

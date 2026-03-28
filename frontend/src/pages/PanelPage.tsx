@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useDebounce } from "../hooks/useDebounce";
 import type { Prospect, ProspectFilters, CatalogItem } from "../types";
 import { STATUS_OPTIONS, IG_OPTIONS, CONTACT_OPTIONS } from "../constants";
+import { getScreenshotUrl } from "../api";
 import { Plus, Edit2, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Props {
@@ -104,9 +105,53 @@ export function PanelPage({ prospects, filters, catalog, onFiltersChange, onAddP
             ) : (
               paginatedProspects.map((p) => (
                 <tr key={p.name} style={{ borderBottom: "1px solid var(--border)", transition: "background 0.2s" }} className="table-row-hover">
-                  <td style={{ padding: "1rem 1.5rem", maxWidth: "250px", whiteSpace: "normal", wordBreak: "break-word" }}>
-                    <div style={{ fontWeight: 600, color: "white" }}>{p.name}</div>
-                    {p.city && <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>{p.city}</div>}
+                  <td style={{ padding: "1rem 1.5rem", maxWidth: "300px", whiteSpace: "normal", wordBreak: "break-word" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                      {(() => {
+                        const imgUrl = p.screenshot_path?.startsWith("http") ? p.screenshot_path : getScreenshotUrl(p.screenshot_path);
+                        return imgUrl ? (
+                          <img
+                            src={imgUrl}
+                            alt=""
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: "8px",
+                              objectFit: "cover",
+                              flexShrink: 0,
+                              border: "1px solid var(--border)",
+                              background: "var(--bg-elevated)",
+                            }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = "none";
+                              (e.target as HTMLImageElement).nextElementSibling?.removeAttribute("style");
+                            }}
+                          />
+                        ) : null;
+                      })()}
+                      <div
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: "8px",
+                          flexShrink: 0,
+                          display: (p.screenshot_path ? "none" : "flex"),
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "0.85rem",
+                          fontWeight: 700,
+                          background: "linear-gradient(135deg, var(--accent), var(--accent-hover))",
+                          color: "white",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {p.name.charAt(0)}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, color: "white" }}>{p.name}</div>
+                        {p.city && <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>{p.city}</div>}
+                      </div>
+                    </div>
                   </td>
                   <td style={{ padding: "1rem" }}>
                     <span className="p-status-tag" style={{ background: "rgba(255, 255, 255, 0.08)", color: "var(--text-secondary)" }}>{p.category}</span>

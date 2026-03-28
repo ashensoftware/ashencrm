@@ -58,7 +58,10 @@ export function ProspectDetailModal({
   inline
 }: Props) {
   const [prospect, setProspect] = useState<Prospect>(initialProspect);
-  const screenshotUrl = getScreenshotUrl(prospect.screenshot_path);
+  // screenshot_path can be a full URL (Google/IG) or a local path
+  const screenshotUrl = prospect.screenshot_path?.startsWith("http") 
+    ? prospect.screenshot_path 
+    : getScreenshotUrl(prospect.screenshot_path);
   const website = prospect.website || prospect.ig_website;
   const phone = prospect.phone || prospect.ig_phone;
   
@@ -68,7 +71,11 @@ export function ProspectDetailModal({
     name: prospect.name || "",
     phone: phone || "",
     website: website || "",
-    address: prospect.address || ""
+    address: prospect.address || "",
+    instagram_url: prospect.instagram_url || "",
+    instagram_handle: prospect.instagram_handle || "",
+    category: prospect.category || "",
+    maps_url: prospect.maps_url || "",
   });
 
   const [promptText, setPromptText] = useState(prospect.prompt_used || "");
@@ -88,6 +95,10 @@ export function ProspectDetailModal({
       phone: newPhone,
       website: newWebsite,
       address: initialProspect.address || "",
+      instagram_url: initialProspect.instagram_url || "",
+      instagram_handle: initialProspect.instagram_handle || "",
+      category: initialProspect.category || "",
+      maps_url: initialProspect.maps_url || "",
     });
     setPromptText(initialProspect.prompt_used || "");
     setDemoUrl(initialProspect.demo_url || "");
@@ -124,7 +135,11 @@ export function ProspectDetailModal({
       name: editForm.name,
       phone: editForm.phone,
       website: editForm.website,
-      address: editForm.address
+      address: editForm.address,
+      instagram_url: editForm.instagram_url,
+      instagram_handle: editForm.instagram_handle,
+      category: editForm.category,
+      maps_url: editForm.maps_url,
     });
     setIsEditing(false);
   };
@@ -164,27 +179,57 @@ export function ProspectDetailModal({
 
         {isEditing ? (
           <div className="fade-in-scale" style={{ background: 'var(--bg-base)', padding: '1.5rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid var(--border)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-            <h4 style={{ marginTop: 0, marginBottom: '1.25rem', color: 'var(--text-primary)', fontSize: '1rem' }}>Editar Información Básica</h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
+            <h4 style={{ marginTop: 0, marginBottom: '1.25rem', color: 'var(--text-primary)', fontSize: '1rem' }}>Editar Información del Prospecto</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ gridColumn: '1 / -1' }}>
                 <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nombre del negocio</label>
                 <input type="text" className="dialog-input" value={editForm.name} onChange={e => setEditForm(f => ({...f, name: e.target.value}))} placeholder="Ej. Gran Restaurante" />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Número de Teléfono</label>
-                <input type="text" className="dialog-input" value={editForm.phone} onChange={e => setEditForm(f => ({...f, phone: e.target.value}))} placeholder="Ej. 300 000 0000" />
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Categoría</label>
+                <input type="text" className="dialog-input" value={editForm.category} onChange={e => setEditForm(f => ({...f, category: e.target.value}))} placeholder="cafe, restaurante..." />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Enlace del Sitio Web</label>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Teléfono</label>
+                <input type="text" className="dialog-input" value={editForm.phone} onChange={e => setEditForm(f => ({...f, phone: e.target.value}))} placeholder="300 000 0000" />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Sitio Web</label>
                 <input type="text" className="dialog-input" value={editForm.website} onChange={e => setEditForm(f => ({...f, website: e.target.value}))} placeholder="https://..." />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Dirección Física</label>
-                <input type="text" className="dialog-input" value={editForm.address} onChange={e => setEditForm(f => ({...f, address: e.target.value}))} placeholder="Ej. Calle 1 # 2-3" />
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Instagram URL</label>
+                <input type="text" className="dialog-input" value={editForm.instagram_url} onChange={e => {
+                  const val = e.target.value;
+                  const handleMatch = val.match(/instagram\.com\/([^/?]+)/);
+                  setEditForm(f => ({...f, instagram_url: val, instagram_handle: handleMatch ? handleMatch[1] : f.instagram_handle}));
+                }} placeholder="https://instagram.com/usuario" />
               </div>
-              <button className="btn-primary" onClick={handleEditSave} disabled={loading} style={{ marginTop: '0.5rem', padding: '0.8rem' }}>
-                {loading ? "Guardando..." : "Guardar Cambios"}
-              </button>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Instagram @</label>
+                <input type="text" className="dialog-input" value={editForm.instagram_handle} onChange={e => {
+                  let val = e.target.value;
+                  const handleMatch = val.match(/instagram\.com\/([^/?]+)/);
+                  if (handleMatch) {
+                    val = handleMatch[1];
+                  }
+                  val = val.replace(/^@/, '');
+                  setEditForm(f => ({...f, instagram_handle: val}));
+                }} placeholder="usuario" />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Dirección</label>
+                <input type="text" className="dialog-input" value={editForm.address} onChange={e => setEditForm(f => ({...f, address: e.target.value}))} placeholder="Calle 1 # 2-3" />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Google Maps URL</label>
+                <input type="text" className="dialog-input" value={editForm.maps_url} onChange={e => setEditForm(f => ({...f, maps_url: e.target.value}))} placeholder="https://maps.google.com/..." />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <button className="btn-primary" onClick={handleEditSave} disabled={loading} style={{ width: '100%', padding: '0.8rem' }}>
+                  {loading ? "Guardando..." : "Guardar Cambios"}
+                </button>
+              </div>
             </div>
           </div>
         ) : (
@@ -277,11 +322,11 @@ export function ProspectDetailModal({
                 {hasWebsite && (
                   <button 
                     className="btn-secondary" 
-                    onClick={() => performUpdate({ status: 'demo_created' })} // Skip to pre-contact
+                    onClick={() => performUpdate({ status: 'has_website' })} // Move to another list
                     style={{ width: '100%', padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                     disabled={loading}
                   >
-                    <Globe size={20} /> Ya tiene Web ➔ Contactar Directo
+                    <Globe size={20} /> Ya tiene Web ➔ Mover a lista
                   </button>
                 )}
               </div>
@@ -374,6 +419,14 @@ export function ProspectDetailModal({
                 <CheckCircle size={48} color="#2ea043" style={{ marginBottom: '1rem' }} />
                 <h3>¡Prospecto Contactado!</h3>
                 <p style={{ color: 'var(--text-muted)' }}>Esperando respuesta del cliente.</p>
+              </div>
+            )}
+
+            {status === "has_website" && (
+              <div style={{ textAlign: 'center', padding: '1rem' }}>
+                <Globe size={48} color="#58a6ff" style={{ marginBottom: '1rem' }} />
+                <h3>En Lista de Espera (Con Web)</h3>
+                <p style={{ color: 'var(--text-muted)' }}>Este prospecto ya tiene página web. Quedará en esta lista para abordarlo en un momento distinto.</p>
               </div>
             )}
 

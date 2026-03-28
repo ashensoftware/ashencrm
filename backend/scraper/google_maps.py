@@ -78,8 +78,6 @@ class GoogleMapsScraper:
         await self.page.goto(url)
         await asyncio.sleep(5)
 
-        await self.page.screenshot(path="data/debug_initial.png")
-        print("Screenshot inicial guardado en data/debug_initial.png")
 
         try:
             consent_btn = await self.page.query_selector(
@@ -97,7 +95,7 @@ class GoogleMapsScraper:
             log("Panel de resultados cargado.")
         except:
             log("Timeout esperando resultados. Intentando parseo directo.")
-            await self.page.screenshot(path="data/debug_no_feed.png")
+            pass
 
         prospects = []
 
@@ -113,12 +111,6 @@ class GoogleMapsScraper:
                 cards = await self.page.query_selector_all("a.hfpxzc")
 
             log(f"Encontrados {len (cards )} resultados parciales. Procesando...")
-
-            if not cards:
-
-                await self.page.screenshot(
-                    path=f"data/debug_no_cards_{scroll_attempts }.png"
-                )
 
             for card in cards:
                 if len(prospects) >= limit:
@@ -159,7 +151,7 @@ class GoogleMapsScraper:
                     reviews_count = 0
                     website = ""
 
-                    m_rating = re.search(r"([0-5](?:[\\.,][0-9])?)", card_text)
+                    m_rating = re.search(r"([0-5](?:[.,][0-9])?)", card_text)
                     if m_rating:
                         raw = m_rating.group(1).replace(",", ".")
                         try:
@@ -168,25 +160,24 @@ class GoogleMapsScraper:
                             rating = 0.0
 
                     m_reviews = re.search(
-                        r"([0-9][0-9\\.,\\s]*)\\s*(?:rese\\u00f1as|rese\\u00f1a|rese\\u00f1a[s]?|reviews?|review|opinion(?:es)?|rese\\u00f1a?s?)",
+                        r"(\d[\d.,\s]*)\s*(?:reseñas|reseña|reviews?|opiniones?)",
                         card_text,
                         flags=re.IGNORECASE,
                     )
                     if m_reviews:
                         raw = m_reviews.group(1)
-                        reviews_count = int(re.sub(r"\\D", "", raw) or 0)
+                        reviews_count = int(re.sub(r"\D", "", raw) or 0)
                     else:
-
                         m_reviews_paren = re.search(
-                            r"[0-5](?:[\\.,][0-9])?\\s*\\(([0-9][0-9\\.,\\s]*)\\)",
+                            r"[0-5](?:[.,][0-9])?\s*\((\d[\d.,\s]*)\)",
                             card_text,
                             flags=re.IGNORECASE,
                         )
                         if m_reviews_paren:
                             raw = m_reviews_paren.group(1)
-                            reviews_count = int(re.sub(r"\\D", "", raw) or 0)
+                            reviews_count = int(re.sub(r"\D", "", raw) or 0)
 
-                    urls = re.findall(r"https?://[^\\s\\)\\]]+", card_text)
+                    urls = re.findall(r"https?://[^\s\)\]]+", card_text)
                     for u in urls:
                         u_l = u.lower()
                         if "google.com/maps" in u_l:
@@ -222,7 +213,7 @@ class GoogleMapsScraper:
 
                     if not phone:
                         m_phone = re.search(
-                            r"(\\+?57[\\s\\-]?)?(3[0-9][\\s\\-]?[0-9]{3}[\\s\\-]?[0-9]{4})",
+                            r"(\+?57[\s\-]?)?(3\d{2}[\s\-]?\d{3,4}[\s\-]?\d{4})",
                             card_text,
                         )
                         if m_phone:
@@ -230,19 +221,30 @@ class GoogleMapsScraper:
 
                     lat_found, lon_found = self._extract_coords(maps_url)
                     if lat_found == 0.0:
-                        log(f"Sin coordenadas para: {name }")
+                        log(f"Sin coordenadas para: {name}")
 
                     detail_reviews = 0
                     detail_website = ""
                     detail_phone = ""
+                    detail_instagram = ""
+                    detail_photo = ""
                     try:
                         if name_el:
                             await name_el.click()
                             await asyncio.sleep(random.uniform(1.5, 2.5))
                             detail_text = await self.page.inner_text("body")
 
+                            # --- Extract photo URL from detail panel ---
+                            try:
+                                photo_el = await self.page.query_selector('img.p-img, button[jsaction*="pane.heroHeaderImage"] img, img[decoding="async"][src*="googleusercontent"]')
+                                if photo_el:
+                                    detail_photo = await photo_el.get_attribute("src") or ""
+                            except Exception:
+                                pass
+
+                            # --- Extract links: website AND instagram ---
                             detail_links = await self.page.query_selector_all(
-                                'a[data-item-id*="authority"], a[aria-label*="Sitio web"], a[aria-label*="Website"], a[href^="http"]'
+                                'a[data-item-id*="authority"], a[aria-label*="Sitio web"], a[aria-label*="Website"], a[href*="instagram.com"], a[href^="http"]'
                             )
                             for lnk in detail_links:
                                 href = await lnk.get_attribute("href")
@@ -251,32 +253,51 @@ class GoogleMapsScraper:
                                 href_l = href.lower()
                                 if "google.com" in href_l:
                                     continue
-                                if "instagram.com" in href_l:
+                                if "duckduckgo.com" in href_l:
+                                    continue
+                                # Capture instagram
+                                if "instagram.com" in href_l and not detail_instagram:
+                                    detail_instagram = href
                                     continue
                                 if "facebook.com" in href_l:
                                     continue
-                                if "duckduckgo.com" in href_l:
-                                    continue
-                                if re.search(r"\.[a-z]{2,}(/|$)", href_l):
+                                if re.search(r"\.[a-z]{2,}(/|$)", href_l) and not detail_website:
                                     detail_website = href.rstrip(".")
-                                    break
 
+                            # --- Extract phone from detail with ARIA label ---
+                            try:
+                                phone_btn = await self.page.query_selector('button[data-item-id*="phone"], a[data-item-id*="phone"]')
+                                if phone_btn:
+                                    phone_aria = await phone_btn.get_attribute("aria-label") or ""
+                                    phone_text = await phone_btn.inner_text() or ""
+                                    phone_raw = phone_aria or phone_text
+                                    # Clean: extract digits
+                                    phone_digits = re.sub(r"[^0-9+ ]", "", phone_raw).strip()
+                                    if phone_digits and len(re.sub(r"\D", "", phone_digits)) >= 7:
+                                        detail_phone = phone_digits
+                            except Exception:
+                                pass
+
+                            # Fallback: regex on full detail text
+                            if not detail_phone:
+                                m_detail_phone = re.search(
+                                    r"(\+?57[\s\-]?)?(3\d{2}[\s\-]?\d{3,4}[\s\-]?\d{4})",
+                                    detail_text,
+                                )
+                                if m_detail_phone:
+                                    detail_phone = m_detail_phone.group(0).strip()
+
+                            # --- Reviews ---
                             m_detail_reviews = re.search(
-                                r"([0-9][0-9\\.,\\s]*)\\s*(?:reseñas|rese\\u00f1as|reviews?|opiniones?)",
+                                r"(\d[\d.,\s]*)\s*(?:reseñas|reseña|reviews?|opiniones?)",
                                 detail_text,
                                 flags=re.IGNORECASE,
                             )
                             if m_detail_reviews:
                                 detail_reviews = int(
-                                    re.sub(r"\\D", "", m_detail_reviews.group(1)) or 0
+                                    re.sub(r"\D", "", m_detail_reviews.group(1)) or 0
                                 )
 
-                            m_detail_phone = re.search(
-                                r"(\\+?57[\\s\\-]?)?(3[0-9][\\s\\-]?[0-9]{3}[\\s\\-]?[0-9]{4})",
-                                detail_text,
-                            )
-                            if m_detail_phone:
-                                detail_phone = m_detail_phone.group(0).strip()
                     except Exception:
                         pass
 
@@ -287,19 +308,42 @@ class GoogleMapsScraper:
                     if not phone and detail_phone:
                         phone = detail_phone
 
+                    # Extract instagram handle from URL
+                    instagram_url = detail_instagram
+                    instagram_handle = ""
+                    if instagram_url:
+                        ig_match = re.search(r"instagram\.com/([^/?]+)", instagram_url)
+                        if ig_match:
+                            instagram_handle = ig_match.group(1)
+
+                        # Try to fetch IG profile pic (prioritize over Maps photo)
+                        try:
+                            ig_page = await self.context.new_page()
+                            await ig_page.goto(instagram_url, timeout=10000)
+                            await asyncio.sleep(1.5)
+                            og_img = await ig_page.query_selector('meta[property="og:image"]')
+                            if og_img:
+                                ig_pic = await og_img.get_attribute("content")
+                                if ig_pic:
+                                    detail_photo = ig_pic  # Override maps photo
+                            await ig_page.close()
+                        except Exception:
+                            try:
+                                await ig_page.close()
+                            except Exception:
+                                pass
+
                     is_all = category == "*"
 
                     if (
                         not website
                         and not phone
                         and not detail_phone
-                        and "instagram.com" not in maps_url
+                        and not instagram_url
                     ):
-
                         log(
-                            f"Descartando {name } por no tener web, teléfono ni instagram."
+                            f"Nota: {name} sin web/teléfono/instagram, guardando con Maps URL."
                         )
-                        continue
 
                     prospect = Prospect(
                         name=name,
@@ -313,6 +357,9 @@ class GoogleMapsScraper:
                         maps_url=maps_url,
                         latitude=lat_found,
                         longitude=lon_found,
+                        instagram_url=instagram_url,
+                        instagram_handle=instagram_handle,
+                        screenshot_path=detail_photo,
                         notes=native_cat if is_all else "",
                         status=ProspectStatus.SCRAPED.value,
                     )

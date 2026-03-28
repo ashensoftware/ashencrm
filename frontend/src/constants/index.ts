@@ -1,0 +1,140 @@
+export const MSG = {
+  ERROR: "Error",
+  SUCCESS: "Éxito",
+  FINISH: "Fin",
+  UNDERSTOOD: "Entendido",
+  CANCEL: "Cancelar",
+  ACCEPT: "Aceptar",
+  SAVE: "Guardar",
+  EDIT: "Editar",
+  ADD: "Añadir",
+  DELETE: "Eliminar",
+  NO_LEADS: "No hay más leads.",
+  NO_LEADS_NEW: "No hay más leads nuevos.",
+  ENTER_CATEGORY: "Ingresa una categoría",
+  SCRAPE_START_FAIL: (detail: string) => `No se pudo iniciar: ${detail}`,
+  LEAD_UPDATED: "Lead actualizado.",
+  PROCESS_STARTED: "Proceso iniciado",
+  AI_DESIGNING: "La IA está diseñando tu web.",
+  WHATSAPP_SENDING: "Preparando envío.",
+  NO_LEADS_FILTER: "No hay leads con los filtros actuales.",
+  TYPE_BORRAR: (name: string) => `Escribe 'BORRAR' para quitar "${name}":`,
+  CONNECTING: "Conectando...",
+  SCANNING: "Escaneando...",
+  COMPLETED: "Completado",
+  WRITE_HERE: "Escribe aquí...",
+} as const;
+
+export const LABELS = {
+  FILTERS_ACTIONS: "Filtros y acciones",
+  FILTERS: "Filtros",
+  ACTIONS: "Acciones",
+  STATUS: "Estado",
+  ALL: "Todos",
+  INSTAGRAM: "Instagram",
+  CONTACTED: "¿Contactado?",
+  ANY: "Cualquiera",
+  YES: "Sí",
+  NO: "No",
+  IG_ONLY: "Solo con Instagram",
+  IG_NONE: "Sin Instagram",
+  SEARCH: "Buscar",
+  SEARCH_PLACEHOLDER: "Ej: Gym, Café...",
+  CATEGORY: "Categoría",
+  ALL_CATEGORIES: "Todas",
+  MANAGE_CATEGORIES: "Gestionar categorías",
+  MODE_TINDER: "Modo Tinder",
+  SCRAPE_NEW_AREA: "Scrapear Nueva Área",
+  START_SCRAPE: "Iniciar Scrape",
+  SCRAPE_ALL: "Scrapear Todo",
+  REGISTRY: "Registro de Leads",
+  FILTER_LIST: "Filtrar lista...",
+  TOTAL: "Total",
+  READY: "Listos",
+  DEMO: "Demo",
+  CONTACTED_STAT: "Contactados",
+  REJECT: "Rechazar",
+  ACCEPT: "Aceptar",
+  MARK_CONTACTED: "Marcar Contactado",
+  GENERATE_DEMO: "Generar Demo",
+  SEND_WHATSAPP: "Enviar WhatsApp",
+  VIEW_ALL_INFO: "Ver toda la info",
+  DETAIL_TITLE: "Detalle del Prospecto",
+  EDIT_LEAD: "Editar Lead",
+  NAME: "Nombre",
+  PHONE: "Teléfono",
+  ADDRESS: "Dirección",
+  SCANNER_TITLE: "Escáner en Vivo",
+  ADD_CATEGORY: "➕ Añadir Categoría",
+  NEW_CATEGORY: "Nueva categoría",
+  CATEGORY_ID_PROMPT: "ID (ej: farmacia):",
+  CATEGORY_LABEL_PROMPT: "Etiqueta (ej: Farmacia):",
+  NEW_SEARCH_ZONE: "Nueva búsqueda por zona",
+  CATEGORY_SEARCH_PROMPT: "¿Qué categoría quieres buscar?",
+  SCRAPE_ALL_AUTO: "Scrapear Todo (Auto-Clasificar)",
+  NO_CATEGORY: "Sin categoría",
+  MAP_OPEN: "Abrir en Maps",
+  MAP_VIEW: "Ver en Maps",
+  DEMO_VIEW: "Ver demo",
+  CONTACT_SECTION: "Contacto",
+  INSTAGRAM_SECTION: "Instagram",
+  MAPS_SECTION: "Google Maps",
+  DEMO_SECTION: "Demo",
+  NOTES_SECTION: "Notas",
+  FOLLOWERS: "Seguidores",
+  RATING: "Rating",
+  REVIEWS: "Reseñas",
+  SCANNING: "Escaneando...",
+  COMPLETED: "Completado",
+  UNDERSTOOD: "Entendido",
+  CANCEL: "Cancelar",
+  SAVE: "Guardar",
+  WRITE_HERE: "Escribe aquí...",
+  NO_LEADS_FILTER: "No hay leads con los filtros actuales.",
+} as const;
+
+export const STATUS_OPTIONS = [
+  { value: "", label: LABELS.ALL },
+  { value: "scraped", label: "Nuevos" },
+  { value: "ready", label: "Potenciales" },
+  { value: "demo_created", label: "Demo Creada" },
+  { value: "has_website", label: "Ya tienen Web" },
+  { value: "rejected", label: "Rechazados" },
+  { value: "contacted", label: "Contactados" },
+] as const;
+
+export const IG_OPTIONS = [
+  { value: "", label: LABELS.ALL },
+  { value: "yes", label: LABELS.IG_ONLY },
+  { value: "no", label: LABELS.IG_NONE },
+] as const;
+
+export const CONTACT_OPTIONS = [
+  { value: "", label: LABELS.ANY },
+  { value: "yes", label: LABELS.YES },
+  { value: "no", label: LABELS.NO },
+] as const;
+
+export const MAP_CENTER = { lat: 6.2442, lng: -75.5812 } as const;
+export const MAP_ZOOM = 13;
+export const DEFAULT_SCRAPE_LIMIT = 20;
+export const DEFAULT_CITY = "Medellín";
+export const POLL_INTERVAL = 5000;
+
+export const WHATSAPP_TEMPLATES = [
+  {
+    id: "first_contact",
+    name: "Primer Contacto",
+    template: "Hola {name}, vimos tu perfil de {category} y notamos que tienen {followers} seguidores. ¡Tienen un excelente negocio! Nos gustaría mostrarles cómo podemos ayudarles a automatizar su atención al cliente.",
+  },
+  {
+    id: "demo_followup",
+    name: "Seguimiento Demo",
+    template: "Hola equipo de {name}, ¿qué tal? Les escribimos para saber qué les pareció la demo que les enviamos. ¿Tienen alguna duda o les gustaría agendar una llamada rápida?",
+  },
+  {
+    id: "direct_offer",
+    name: "Oferta Directa",
+    template: "Hola {name}, somos expertos en IA para negocios como el suyo ({category}). Actualmente estamos ofreciendo una prueba sin compromiso. ¿Les interesaría ver cómo funciona?",
+  }
+];

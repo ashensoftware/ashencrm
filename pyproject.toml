@@ -1,0 +1,19 @@
+[project]
+name = "busqueda-de-clientes"
+version = "0.1.0"
+description = "Pipeline automatizado de adquisición de clientes con Playwright, Lovable y WhatsApp."
+authors = [{ name = "Antigravity Assistant" }]
+dependencies = [
+    "playwright>=1.40.0",
+    "python-dotenv>=1.0.0",
+    "pytest>=7.0.0",
+    "pandas>=2.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

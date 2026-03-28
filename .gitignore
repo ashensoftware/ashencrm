@@ -16,8 +16,7 @@ dist-ssr/
 data/prospects.db
 data/screenshots/
 data/browser_data/
-*.json
-*.csv
+data/exports/
 
 # Vite/React
 npm-debug.log*

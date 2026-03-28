@@ -27,6 +27,7 @@ class ProspectStatus(str, Enum):
 class Prospect:
     name: str
     category: str
+    id: Optional[int] = None
     address: str = ""
     city: str = ""
     phone: str = ""

@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import { LABELS } from "../../constants";
 import type { Prospect } from "../../types";
 import type { CatalogItem } from "../../types";
+import { catalogCategoryOptions } from "../../utils/catalogCategoryOptions";
 
 interface EditForm {
   name: string;
@@ -19,6 +21,11 @@ interface Props {
 }
 
 export function EditModal({ prospect: _prospect, form, catalog, onFormChange, onClose, onSubmit }: Props) {
+  const categoryChoices = useMemo(
+    () => catalogCategoryOptions(catalog, form.category),
+    [catalog, form.category]
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await onSubmit();
@@ -45,8 +52,11 @@ export function EditModal({ prospect: _prospect, form, catalog, onFormChange, on
               value={form.category}
               onChange={(e) => onFormChange({ ...form, category: e.target.value })}
             >
-              {catalog.map((c) => (
-                <option key={c.name} value={c.name}>{c.label}</option>
+              <option value="">— Sin categoría —</option>
+              {categoryChoices.map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.label}
+                </option>
               ))}
             </select>
           </div>

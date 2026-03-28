@@ -3,7 +3,8 @@ import { StatsPanel } from "./StatsPanel";
 import type { Prospect } from "../types";
 import type { ProspectFilters } from "../types";
 import type { CatalogItem } from "../types";
-import { Map, Flame, LayoutDashboard, Search, ClipboardList, Activity, Settings } from "lucide-react";
+import type { ReactNode } from "react";
+import { BarChart2, Map, Flame, LayoutDashboard, Search, ClipboardList, Activity, Settings } from "lucide-react";
 
 interface Props {
   prospects: Prospect[];
@@ -13,6 +14,7 @@ interface Props {
   selectedProspect: Prospect | null;
   currentView: "overview" | "map" | "tinder" | "panel" | "todo" | "admin";
   onViewChange: (v: "overview" | "map" | "tinder" | "panel" | "todo" | "admin") => void;
+  homeLink?: ReactNode;
   optionsOpen?: boolean;
   registryOpen?: boolean;
   scrapeFormOpen: boolean;
@@ -29,6 +31,7 @@ interface Props {
 }
 
 import { createPortal } from "react-dom";
+import { Link } from "react-router-dom";
 
 export function Sidebar({
   stats,
@@ -41,12 +44,16 @@ export function Sidebar({
   onScrapeFormToggle,
   onScrape,
   defaultScrapeLimit,
+  homeLink,
 }: Props) {
   return (
     <>
     <aside className="sidebar">
-      <header>
-        <img src="/logo-horizontal.png" alt="Ashen" style={{ height: '32px', filter: 'brightness(0) invert(1)' }} />
+      <header className="sidebar-header-brand">
+        <Link to="/" className="sidebar-logo-link" aria-label="Ir a inicio">
+          <img src="/logo-horizontal.png" alt="Ashen" className="sidebar-logo-img" />
+        </Link>
+        {homeLink && <div className="sidebar-inicio-wrap">{homeLink}</div>}
       </header>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '1rem', borderBottom: '1px solid var(--border)' }}>
@@ -79,19 +86,19 @@ export function Sidebar({
           <LayoutDashboard size={18} /> Gestión de Leads
         </button>
         <button 
+          className={currentView === 'todo' ? 'btn-primary' : 'btn-secondary'} 
+          onClick={() => onViewChange('todo')}
+          style={{ width: '100%', justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+        >
+          <BarChart2 size={18} /> Pipeline
+        </button>
+
+        <button 
           className={currentView === 'admin' ? 'btn-primary' : 'btn-secondary'} 
           onClick={() => onViewChange('admin')}
           style={{ width: '100%', justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
         >
           <Settings size={18} /> Administracion
-        </button>
-
-        <button 
-          className={currentView === 'todo' ? 'btn-primary' : 'btn-secondary'} 
-          onClick={() => onViewChange('todo')}
-          style={{ width: '100%', justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-        >
-          <ClipboardList size={18} /> En Progreso
         </button>
       </div>
 

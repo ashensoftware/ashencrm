@@ -1,4 +1,13 @@
-﻿import type { Prospect, ProspectFilters, AppSettings, CatalogItem } from "../types";
+import type {
+  Prospect,
+  ProspectFilters,
+  AppSettings,
+  CatalogItem,
+  Client,
+  ClientMeeting,
+  ClientMapMarker,
+  ParsedMapsUrl,
+} from "../types";
 
 const BASE = "/api";
 
@@ -123,4 +132,128 @@ export function getScreenshotUrl(path?: string): string | null {
   if (!path) return null;
   const name = path.replace(/^.*[\\/]/, "");
   return name ? `/api/screenshots/${encodeURIComponent(name)}` : null;
+}
+
+const rawFetch = (path: string, opts: RequestInit = {}) =>
+  fetch(`${BASE}${path}`, opts);
+
+export async function fetchClients(): Promise<Client[]> {
+  const res = await rawFetch("/clients");
+  if (!res.ok) throw new Error("No se pudieron cargar los clientes");
+  return res.json();
+}
+
+export async function fetchClientMapMarkers(): Promise<ClientMapMarker[]> {
+  const res = await rawFetch("/clients/map-markers");
+  if (!res.ok) throw new Error("No se pudieron cargar los marcadores del mapa");
+  return res.json();
+}
+
+export async function parseClientMapsUrl(url: string): Promise<ParsedMapsUrl> {
+  const res = await request("/clients/parse-maps-url", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || "No se pudo leer el enlace");
+  }
+  return res.json();
+}
+
+export async function fetchClient(id: number): Promise<Client & { meetings: ClientMeeting[] }> {
+  const res = await rawFetch(`/clients/${id}`);
+  if (!res.ok) throw new Error("Cliente no encontrado");
+  return res.json();
+}
+
+export async function createClient(body: Partial<Client>): Promise<Client & { meetings: ClientMeeting[] }> {
+  const res = await request("/clients", { method: "POST", body: JSON.stringify(body) });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || "Error al crear");
+  }
+  return res.json();
+}
+
+export async function patchClient(
+  id: number,
+  body: Partial<Client>
+): Promise<Client & { meetings: ClientMeeting[] }> {
+  const res = await request(`/clients/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || "Error al guardar");
+  }
+  return res.json();
+}
+
+export async function deleteClient(id: number): Promise<void> {
+  const res = await request(`/clients/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("No se pudo eliminar");
+}
+
+export async function createClientFromProspect(
+  prospectName: string
+): Promise<Client & { meetings: ClientMeeting[] }> {
+  const res = await rawFetch(
+    `/clients/from-prospect/${encodeURIComponent(prospectName)}`,
+    { method: "POST" }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || "Error al importar");
+  }
+  return res.json();
+}
+
+export function clientQuotePdfUrl(clientId: number): string {
+  return `${BASE}/clients/${clientId}/quote-pdf`;
+}
+
+export async function uploadClientQuote(
+  clientId: number,
+  file: File,
+  opts?: { quote_amount?: number; quote_currency?: string; estimated_delivery_at?: string }
+): Promise<Client & { meetings: ClientMeeting[] }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (opts?.quote_amount != null) fd.append("quote_amount", String(opts.quote_amount));
+  if (opts?.quote_currency) fd.append("quote_currency", opts.quote_currency);
+  if (opts?.estimated_delivery_at) fd.append("estimated_delivery_at", opts.estimated_delivery_at);
+  const res = await rawFetch(`/clients/${clientId}/quote`, { method: "POST", body: fd });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || "Error al subir PDF");
+  }
+  return res.json();
+}
+
+export async function addClientMeeting(
+  clientId: number,
+  body: Partial<ClientMeeting>
+): Promise<ClientMeeting> {
+  const res = await request(`/clients/${clientId}/meetings`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("Error al crear reunión");
+  return res.json();
+}
+
+export async function patchClientMeeting(
+  meetingId: number,
+  body: Partial<ClientMeeting>
+): Promise<ClientMeeting> {
+  const res = await request(`/clients/meetings/${meetingId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("Error al actualizar reunión");
+  return res.json();
+}
+
+export async function deleteClientMeeting(meetingId: number): Promise<void> {
+  const res = await request(`/clients/meetings/${meetingId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Error al eliminar reunión");
 }

@@ -51,3 +51,35 @@ const STATUS_LABELS: Record<string, string> = {
 export function mapStatusToLabel(status?: string): string {
   return STATUS_LABELS[status || ""] ?? status ?? "—";
 }
+
+const CLIENT_STAGE_COLORS: Record<string, string> = {
+  quote_sent: "#8b5cf6",
+  meetings: "#58a6ff",
+  payment_received: "#22c55e",
+  contract: "#f59e0b",
+  in_development: "#a78bfa",
+  qa_staging: "#06b6d4",
+  delivered: "#10b981",
+  on_hold: "#64748b",
+  closed_lost: "#94a3b8",
+};
+
+const CLIENT_STAGE_LABELS: Record<string, string> = {
+  quote_sent: "Cotización enviada",
+  meetings: "Reuniones",
+  payment_received: "Pago recibido",
+  contract: "Contrato",
+  in_development: "En desarrollo",
+  qa_staging: "QA / staging",
+  delivered: "Entregado",
+  on_hold: "En pausa",
+  closed_lost: "Cerrado perdido",
+};
+
+export function mapClientStageToColor(stage?: string): string {
+  return CLIENT_STAGE_COLORS[stage || ""] ?? "#94a3b8";
+}
+
+export function mapClientStageToLabel(stage?: string): string {
+  return CLIENT_STAGE_LABELS[stage || ""] ?? (stage || "").replace(/_/g, " ") || "—";
+}

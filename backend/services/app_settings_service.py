@@ -25,8 +25,14 @@ SETTING_KEYS = frozenset(
         "lovable_timeout",
         "lovable_headless",
         "whatsapp_templates",
+        "client_preferences",
     }
 )
+
+_DEFAULT_CLIENT_PREFERENCES: dict[str, Any] = {
+    "default_currency": "COP",
+    "quote_footer_note": "",
+}
 
 _DEFAULT_TEMPLATES: list[dict[str, str]] = [
     {
@@ -81,6 +87,7 @@ def _defaults_as_strings() -> dict[str, str]:
         "lovable_timeout": str(s.generator.lovable_timeout),
         "lovable_headless": "true" if s.generator.lovable_headless else "false",
         "whatsapp_templates": DEFAULT_WHATSAPP_TEMPLATES_JSON,
+        "client_preferences": json.dumps(_DEFAULT_CLIENT_PREFERENCES, ensure_ascii=False),
     }
 
 
@@ -121,7 +128,22 @@ def typed_public_settings(db) -> dict[str, Any]:
         "lovable_timeout": int(float(m["lovable_timeout"])),
         "lovable_headless": _parse_bool(m["lovable_headless"]),
         "whatsapp_templates": templates,
+        "client_preferences": _parse_client_preferences(m.get("client_preferences")),
     }
+
+
+def _parse_client_preferences(raw: str | None) -> dict[str, Any]:
+    if not raw or not str(raw).strip():
+        return dict(_DEFAULT_CLIENT_PREFERENCES)
+    try:
+        d = json.loads(raw)
+        if not isinstance(d, dict):
+            return dict(_DEFAULT_CLIENT_PREFERENCES)
+        out = dict(_DEFAULT_CLIENT_PREFERENCES)
+        out.update({k: v for k, v in d.items() if k in _DEFAULT_CLIENT_PREFERENCES})
+        return out
+    except json.JSONDecodeError:
+        return dict(_DEFAULT_CLIENT_PREFERENCES)
 
 
 def patch_body_to_storage(body: dict[str, Any]) -> dict[str, str]:
@@ -133,6 +155,12 @@ def patch_body_to_storage(body: dict[str, Any]) -> dict[str, str]:
             if not isinstance(v, list):
                 raise ValueError("whatsapp_templates debe ser un arreglo")
             out[k] = json.dumps(v, ensure_ascii=False)
+        elif k == "client_preferences":
+            if not isinstance(v, dict):
+                raise ValueError("client_preferences debe ser un objeto")
+            merged = dict(_DEFAULT_CLIENT_PREFERENCES)
+            merged.update({kk: vv for kk, vv in v.items() if kk in _DEFAULT_CLIENT_PREFERENCES})
+            out[k] = json.dumps(merged, ensure_ascii=False)
         elif isinstance(v, bool):
             out[k] = "true" if v else "false"
         else:

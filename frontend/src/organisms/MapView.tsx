@@ -3,7 +3,7 @@ import L from "leaflet";
 import "leaflet.markercluster";
 import type { Prospect } from "../types";
 import type { Hexagon } from "../types";
-import { mapStatusToColor } from "../utils";
+import { mapClientStageToColor, mapClientStageToLabel, mapStatusToColor } from "../utils";
 import { LABELS, MAP_CENTER as DEFAULT_MAP_CENTER, MAP_ZOOM as DEFAULT_MAP_ZOOM } from "../constants";
 
 interface Props {
@@ -13,9 +13,19 @@ interface Props {
   onHexClick: (hex: unknown, latlng: { lat: number; lng: number }) => void;
   mapCenter?: { lat: number; lng: number };
   mapZoom?: number;
+  /** Misma rejilla y estilo que leads; solo cambian marcadores (clientes) y clics en hexágonos. */
+  variant?: "leads" | "clients";
 }
 
-export function MapView({ prospects, hexagons, selectedProspect, onHexClick, mapCenter, mapZoom }: Props) {
+export function MapView({
+  prospects,
+  hexagons,
+  selectedProspect,
+  onHexClick,
+  mapCenter,
+  mapZoom,
+  variant = "leads",
+}: Props) {
   const mapRef = useRef<L.Map | null>(null);
   // @ts-ignore - leaflet.markercluster types not in @types/leaflet
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -66,9 +76,10 @@ export function MapView({ prospects, hexagons, selectedProspect, onHexClick, map
     if (!cluster) return;
     cluster.clearLayers();
 
+    const isClients = variant === "clients";
     prospects.forEach((p) => {
       if (!p.latitude || !p.longitude) return;
-      const color = mapStatusToColor(p.status);
+      const color = isClients ? mapClientStageToColor(p.status) : mapStatusToColor(p.status);
       const marker = L.circleMarker([p.latitude, p.longitude], {
         radius: 8,
         fillColor: color,
@@ -77,25 +88,39 @@ export function MapView({ prospects, hexagons, selectedProspect, onHexClick, map
         opacity: 1,
         fillOpacity: 0.85,
       });
-      const statusLabel = (p.status || "N/A").replace("_", " ").toUpperCase();
-      const scoreHtml = p.lead_score != null ? `<br><small>Score: ${p.lead_score}</small>` : "";
+      const statusLabel = isClients
+        ? mapClientStageToLabel(p.status)
+        : (p.status || "N/A").replace("_", " ").toUpperCase();
+      const scoreHtml =
+        !isClients && p.lead_score != null ? `<br><small>Score: ${p.lead_score}</small>` : "";
+      const addrOrCat = isClients
+        ? escapeHtml(p.category || "")
+        : escapeHtml(p.address || "");
+      const mapsLink = p.maps_url
+        ? `<a href="${p.maps_url}" target="_blank" rel="noopener">${LABELS.MAP_VIEW}</a>`
+        : "";
+      const pipelineLink = isClients
+        ? `<p><a href="/clientes/pipeline">Ver pipeline de clientes</a></p>`
+        : "";
       marker.bindPopup(
         `<div class="map-popup">
           <strong>${escapeHtml(p.name)}</strong>
-          <p>${escapeHtml(p.address || "")}</p>
-          <p><span class="popup-status">${statusLabel}</span>${scoreHtml}</p>
-          ${p.maps_url ? `<a href="${p.maps_url}" target="_blank" rel="noopener">${LABELS.MAP_VIEW}</a>` : ""}
+          ${addrOrCat ? `<p>${addrOrCat}</p>` : ""}
+          <p><span class="popup-status">${escapeHtml(statusLabel)}</span>${scoreHtml}</p>
+          ${mapsLink}
+          ${pipelineLink}
         </div>`
       );
       cluster.addLayer(marker);
     });
-  }, [prospects]);
+  }, [prospects, variant]);
 
   useEffect(() => {
     const hexLayer = hexLayerRef.current;
     if (!hexLayer) return;
     hexLayer.clearLayers();
 
+    const isClients = variant === "clients";
     hexagons.forEach((hex) => {
       const isCompleted = hex.status === "completed";
       const isEmpty = hex.status === "empty";
@@ -111,12 +136,20 @@ export function MapView({ prospects, hexagons, selectedProspect, onHexClick, map
       });
       let infoMsg = `Área: ${hex.count} leads (${hex.processed_count} revisados)`;
       if (isCompleted) infoMsg = `Completado (${hex.count} leads)`;
-      if (isEmpty) infoMsg = `Zona sin explorar — Clic para scrapear`;
+      if (isEmpty)
+        infoMsg = isClients
+          ? `Zona sin explorar — Para scrapear, abre Leads → Explorar mapa`
+          : `Zona sin explorar — Clic para scrapear`;
+      if (isClients && !isEmpty && !isCompleted)
+        infoMsg = `Captación: ${hex.count} leads (${hex.processed_count} revisados)`;
       polygon.bindTooltip(infoMsg, { sticky: true });
-      polygon.on("click", (e) => onHexClick(hex, e.latlng));
+      polygon.on("click", (e) => {
+        if (isClients) return;
+        onHexClick(hex, e.latlng);
+      });
       hexLayer.addLayer(polygon);
     });
-  }, [hexagons, onHexClick]);
+  }, [hexagons, onHexClick, variant]);
 
   useEffect(() => {
     if (!selectedProspect?.latitude || !selectedProspect?.longitude || !mapRef.current || !clusterRef.current) return;

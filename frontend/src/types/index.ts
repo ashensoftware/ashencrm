@@ -1,6 +1,8 @@
 export interface Prospect {
   name: string;
   category: string;
+  /** Presente en respuestas de API (lista de prospectos) */
+  id?: number;
   address?: string;
   city?: string;
   phone?: string;
@@ -27,6 +29,8 @@ export interface Prospect {
   is_contacted?: boolean;
   notes?: string;
   lead_score?: number;
+  /** Solo mapa de clientes: id de ficha cliente */
+  client_id?: number;
 }
 
 export interface ProspectFilters {
@@ -50,6 +54,11 @@ export interface WhatsappTemplate {
   template: string;
 }
 
+export interface ClientPreferences {
+  default_currency: string;
+  quote_footer_note: string;
+}
+
 export interface AppSettings {
   default_city: string;
   default_scrape_limit: number;
@@ -67,6 +76,7 @@ export interface AppSettings {
   lovable_timeout: number;
   lovable_headless: boolean;
   whatsapp_templates: WhatsappTemplate[];
+  client_preferences?: ClientPreferences;
 }
 
 export interface Hexagon {
@@ -82,3 +92,62 @@ export interface StatusInfo {
 }
 
 export type ModalType = "alert" | "prompt" | "category" | "edit" | "detail" | "add" | "scanner" | null;
+
+export interface ClientMeeting {
+  id: number;
+  client_id: number;
+  title: string;
+  scheduled_at: string;
+  duration_min: number;
+  notes: string;
+  status: string;
+}
+
+export interface Client {
+  id: number;
+  prospect_id: number | null;
+  display_name: string;
+  category: string;
+  contact_email: string;
+  phone: string;
+  notes: string;
+  stage: string;
+  quote_amount: number | null;
+  quote_currency: string;
+  quote_pdf_path: string;
+  estimated_delivery_at: string;
+  quoted_at: string;
+  contract_required: number;
+  contract_skipped: number;
+  contract_signed_at: string;
+  contract_pdf_path: string;
+  payment_status: string;
+  github_repo_url: string;
+  production_domain: string;
+  drive_folder_url: string;
+  staging_url: string;
+  maps_url: string;
+  latitude?: number;
+  longitude?: number;
+  created_at: string;
+  updated_at: string;
+  meetings?: ClientMeeting[];
+}
+
+export interface ClientMapMarker {
+  id: number;
+  display_name: string;
+  category: string;
+  stage: string;
+  latitude: number;
+  longitude: number;
+  maps_url: string;
+}
+
+/** Respuesta de POST /clients/parse-maps-url */
+export interface ParsedMapsUrl {
+  latitude: number;
+  longitude: number;
+  resolved_url: string;
+  suggested_display_name: string;
+}

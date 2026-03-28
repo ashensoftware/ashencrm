@@ -40,7 +40,7 @@ export function PanelPage({ prospects, filters, catalog, onFiltersChange, onAddP
       {/* Header & Actions */}
       <div style={{ padding: "1.5rem", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: "1.5rem", color: "white" }}>Gestión de Leads y Clientes</h1>
+          <h1 style={{ margin: 0, fontSize: "1.5rem", color: "white" }}>Gestión de Leads</h1>
           <p style={{ margin: "0.25rem 0 0", color: "var(--text-secondary)", fontSize: "0.9rem" }}>Administra tu base de datos y agrega clientes manualmente ({prospects.length} resultados filtrados).</p>
         </div>
         <button className="btn-primary" onClick={onAddProspect} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>

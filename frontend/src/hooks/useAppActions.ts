@@ -62,7 +62,7 @@ export function useAppActions(
       if (next && "message" in next) {
         await modals.showAlert(MSG.FINISH, next.message || MSG.NO_LEADS);
         setSelectedProspect(null);
-        navigate("/panel");
+        navigate("/leads/panel");
       } else if (next?.name) {
         setSelectedProspect(next as Prospect);
       } else {
@@ -73,13 +73,13 @@ export function useAppActions(
   );
 
   const handleTinderNext = useCallback(async () => {
-    navigate("/tinder");
+    navigate("/leads/tinder");
     setTinderHistory((prev) => selectedProspect ? [...prev, selectedProspect] : prev);
     const p = await fetchRandomProspect("scraped");
     if (p && "message" in p) {
       await modals.showAlert(MSG.FINISH, p.message || MSG.NO_LEADS_NEW);
       setSelectedProspect(null);
-      navigate("/panel");
+      navigate("/leads/panel");
       return;
     }
     if (p?.name) setSelectedProspect(p as Prospect);

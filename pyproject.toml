@@ -7,12 +7,21 @@ dependencies = [
     "playwright>=1.40.0",
     "python-dotenv>=1.0.0",
     "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
     "pandas>=2.0.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
 python_files = "test_*.py"
+
+[tool.coverage.run]
+source = ["backend"]
+omit = ["backend/tests/*", "backend/scripts/*"]
+
+[tool.coverage.report]
+fail_under = 0
+show_missing = true
 
 [build-system]
 requires = ["setuptools>=61.0"]

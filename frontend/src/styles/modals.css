@@ -2,10 +2,51 @@
 .modal-content { background: var(--bg-elevated); width: 560px; max-width: 92%; max-height: 85vh; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; display: flex; flex-direction: column; box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5); }
 .modal-content header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem; }
 .modal-content header h2 { font-size: 1.15rem; font-weight: 600; }
+/* Cabecera en columna (título + subtítulo); evita que el subtítulo quede al lado del h2 */
+.modal-content header.modal-header--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
+}
+.modal-content header.modal-header--stacked .modal-header-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.modal-content header.modal-header--stacked h2 {
+  margin: 0;
+  line-height: 1.25;
+}
+.modal-header-subtitle {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.modal-help-overlay {
+  z-index: 2100;
+}
+.modal-help-panel {
+  max-width: 420px;
+}
+.modal-help-panel ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.15rem;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+.modal-help-panel li {
+  margin-bottom: 0.4rem;
+}
 .close-btn { background: none; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; padding: 4px; line-height: 1; transition: color 0.2s; }
 .close-btn:hover { color: var(--text-primary); }
 .modal-actions { margin-top: 1.25rem; display: flex; justify-content: flex-end; gap: 0.75rem; }
 .small-modal { width: 400px; }
+.new-client-modal.small-modal {
+  width: min(440px, 94vw);
+}
 .category-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; max-height: 360px; overflow-y: auto; }
 .category-item { display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 1rem; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .form-group { display: flex; flex-direction: column; gap: 0.5rem; }

@@ -42,6 +42,7 @@ class ProspectRepository:
     def _get_conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path))
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
     def _conn(self) -> sqlite3.Connection:
@@ -107,6 +108,48 @@ class ProspectRepository:
                     value TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS clients (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    prospect_id INTEGER UNIQUE,
+                    display_name TEXT NOT NULL,
+                    category TEXT DEFAULT '',
+                    contact_email TEXT DEFAULT '',
+                    phone TEXT DEFAULT '',
+                    notes TEXT DEFAULT '',
+                    stage TEXT NOT NULL DEFAULT 'quote_sent',
+                    quote_amount REAL,
+                    quote_currency TEXT DEFAULT 'COP',
+                    quote_pdf_path TEXT DEFAULT '',
+                    estimated_delivery_at TEXT DEFAULT '',
+                    quoted_at TEXT DEFAULT '',
+                    contract_required INTEGER DEFAULT 0,
+                    contract_skipped INTEGER DEFAULT 0,
+                    contract_signed_at TEXT DEFAULT '',
+                    contract_pdf_path TEXT DEFAULT '',
+                    payment_status TEXT DEFAULT 'pending',
+                    github_repo_url TEXT DEFAULT '',
+                    production_domain TEXT DEFAULT '',
+                    drive_folder_url TEXT DEFAULT '',
+                    staging_url TEXT DEFAULT '',
+                    maps_url TEXT DEFAULT '',
+                    latitude REAL DEFAULT 0,
+                    longitude REAL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (prospect_id) REFERENCES prospects(id) ON DELETE SET NULL
+                );
+                CREATE TABLE IF NOT EXISTS client_meetings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    client_id INTEGER NOT NULL,
+                    title TEXT DEFAULT '',
+                    scheduled_at TEXT NOT NULL,
+                    duration_min INTEGER DEFAULT 60,
+                    notes TEXT DEFAULT '',
+                    status TEXT DEFAULT 'scheduled',
+                    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_clients_stage ON clients(stage);
+                CREATE INDEX IF NOT EXISTS idx_meetings_client ON client_meetings(client_id);
             """)
             cur = conn.execute("SELECT COUNT(*) FROM category_catalog")
             if cur.fetchone()[0] == 0:
@@ -125,6 +168,14 @@ class ProspectRepository:
                 conn.execute(
                     "ALTER TABLE prospects ADD COLUMN whatsapp_message TEXT DEFAULT ''"
                 )
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE clients ADD COLUMN latitude REAL DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE clients ADD COLUMN longitude REAL DEFAULT 0")
             except sqlite3.OperationalError:
                 pass
             conn.commit()
@@ -158,6 +209,7 @@ class ProspectRepository:
         try:
             with self._conn() as conn:
                 data = prospect.to_dict()
+                data.pop("id", None)
                 cols = ", ".join(data.keys())
                 placeholders = ", ".join(["?"] * len(data))
                 conn.execute(
@@ -511,3 +563,271 @@ class ProspectRepository:
                 for p in prospects:
                     writer.writerow(p.to_dict())
         return path
+
+    # --- Clientes (post-venta) ---
+
+    def get_prospect_id_by_name(self, name: str) -> Optional[int]:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT id FROM prospects WHERE name = ? LIMIT 1", (name,)
+            ).fetchone()
+            return int(row["id"]) if row else None
+
+    def get_prospect_by_id(self, prospect_id: int) -> Optional[Prospect]:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM prospects WHERE id = ?", (prospect_id,)
+            ).fetchone()
+            return Prospect.from_dict(dict(row)) if row else None
+
+    def client_exists_for_prospect(self, prospect_id: int) -> bool:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM clients WHERE prospect_id = ? LIMIT 1",
+                (prospect_id,),
+            ).fetchone()
+            return row is not None
+
+    def list_clients(self) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM clients ORDER BY datetime(updated_at) DESC"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def list_clients_map_markers(self) -> list[dict]:
+        """Clientes con coordenadas: propias o heredadas del lead vinculado."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT c.id, c.display_name, c.category, c.stage, c.prospect_id,
+                    COALESCE(NULLIF(c.latitude, 0), NULLIF(pr.latitude, 0)) AS lat,
+                    COALESCE(NULLIF(c.longitude, 0), NULLIF(pr.longitude, 0)) AS lng,
+                    COALESCE(NULLIF(c.maps_url, ''), NULLIF(pr.maps_url, ''), '') AS maps_url
+                FROM clients c
+                LEFT JOIN prospects pr ON c.prospect_id = pr.id
+                """
+            ).fetchall()
+        out: list[dict] = []
+        for r in rows:
+            lat, lng = r["lat"], r["lng"]
+            if lat is None or lng is None:
+                continue
+            try:
+                la, ln = float(lat), float(lng)
+            except (TypeError, ValueError):
+                continue
+            if la == 0 and ln == 0:
+                continue
+            out.append(
+                {
+                    "id": int(r["id"]),
+                    "display_name": r["display_name"] or "",
+                    "category": r["category"] or "",
+                    "stage": r["stage"] or "quote_sent",
+                    "latitude": la,
+                    "longitude": ln,
+                    "maps_url": r["maps_url"] or "",
+                }
+            )
+        return out
+
+    def get_client(self, client_id: int) -> Optional[dict]:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM clients WHERE id = ?", (client_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def insert_client(self, data: dict) -> int:
+        now = datetime.now().isoformat()
+        cols = [
+            "prospect_id",
+            "display_name",
+            "category",
+            "contact_email",
+            "phone",
+            "notes",
+            "stage",
+            "quote_amount",
+            "quote_currency",
+            "quote_pdf_path",
+            "estimated_delivery_at",
+            "quoted_at",
+            "contract_required",
+            "contract_skipped",
+            "contract_signed_at",
+            "contract_pdf_path",
+            "payment_status",
+            "github_repo_url",
+            "production_domain",
+            "drive_folder_url",
+            "staging_url",
+            "maps_url",
+            "latitude",
+            "longitude",
+        ]
+        row = {c: data[c] for c in cols if c in data}
+        row.setdefault("display_name", "")
+        row.setdefault("stage", "quote_sent")
+        row["created_at"] = now
+        row["updated_at"] = now
+        for k in ("contract_required", "contract_skipped"):
+            if k in row and row[k] is not None:
+                row[k] = 1 if row[k] else 0
+        keys = list(row.keys())
+        placeholders = ",".join("?" * len(keys))
+        with self._conn() as conn:
+            cur = conn.execute(
+                f"INSERT INTO clients ({','.join(keys)}) VALUES ({placeholders})",
+                [row[k] for k in keys],
+            )
+            conn.commit()
+            return int(cur.lastrowid)
+
+    def update_client(self, client_id: int, data: dict) -> None:
+        if not data:
+            return
+        allowed = {
+            "prospect_id",
+            "display_name",
+            "category",
+            "contact_email",
+            "phone",
+            "notes",
+            "stage",
+            "quote_amount",
+            "quote_currency",
+            "quote_pdf_path",
+            "estimated_delivery_at",
+            "quoted_at",
+            "contract_required",
+            "contract_skipped",
+            "contract_signed_at",
+            "contract_pdf_path",
+            "payment_status",
+            "github_repo_url",
+            "production_domain",
+            "drive_folder_url",
+            "staging_url",
+            "maps_url",
+            "latitude",
+            "longitude",
+        }
+        updates = {k: v for k, v in data.items() if k in allowed}
+        if not updates:
+            return
+        for k in ("contract_required", "contract_skipped"):
+            if k in updates and updates[k] is not None:
+                updates[k] = 1 if updates[k] else 0
+        updates["updated_at"] = datetime.now().isoformat()
+        sets = ", ".join(f"{k} = ?" for k in updates)
+        params = list(updates.values()) + [client_id]
+        with self._conn() as conn:
+            conn.execute(f"UPDATE clients SET {sets} WHERE id = ?", params)
+            conn.commit()
+
+    def delete_client(self, client_id: int) -> None:
+        with self._conn() as conn:
+            conn.execute("DELETE FROM clients WHERE id = ?", (client_id,))
+            conn.commit()
+
+    def touch_client_updated_at(self, client_id: int) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE clients SET updated_at = ? WHERE id = ?",
+                (datetime.now().isoformat(), client_id),
+            )
+            conn.commit()
+
+    def get_client_meeting(self, meeting_id: int) -> Optional[dict]:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM client_meetings WHERE id = ?", (meeting_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def list_client_meetings(self, client_id: int) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM client_meetings WHERE client_id = ? ORDER BY datetime(scheduled_at)",
+                (client_id,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def insert_client_meeting(self, client_id: int, data: dict) -> int:
+        title = data.get("title", "")
+        scheduled_at = data.get("scheduled_at") or datetime.now().isoformat()
+        duration_min = int(data.get("duration_min", 60))
+        notes = data.get("notes", "")
+        status = data.get("status", "scheduled")
+        with self._conn() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO client_meetings (client_id, title, scheduled_at, duration_min, notes, status)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (client_id, title, scheduled_at, duration_min, notes, status),
+            )
+            conn.commit()
+            self.touch_client_updated_at(client_id)
+            return int(cur.lastrowid)
+
+    def update_client_meeting(self, meeting_id: int, data: dict) -> None:
+        allowed = {"title", "scheduled_at", "duration_min", "notes", "status"}
+        updates = {k: v for k, v in data.items() if k in allowed}
+        if not updates:
+            return
+        if "duration_min" in updates:
+            updates["duration_min"] = int(updates["duration_min"])
+        cid_row = None
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT client_id FROM client_meetings WHERE id = ?", (meeting_id,)
+            ).fetchone()
+            if not row:
+                return
+            cid_row = int(row["client_id"])
+            sets = ", ".join(f"{k} = ?" for k in updates)
+            conn.execute(
+                f"UPDATE client_meetings SET {sets} WHERE id = ?",
+                list(updates.values()) + [meeting_id],
+            )
+            conn.commit()
+        if cid_row is not None:
+            self.touch_client_updated_at(cid_row)
+
+    def delete_client_meeting(self, meeting_id: int) -> None:
+        cid_row = None
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT client_id FROM client_meetings WHERE id = ?", (meeting_id,)
+            ).fetchone()
+            if row:
+                cid_row = int(row["client_id"])
+            conn.execute("DELETE FROM client_meetings WHERE id = ?", (meeting_id,))
+            conn.commit()
+        if cid_row is not None:
+            self.touch_client_updated_at(cid_row)
+
+    def create_client_from_prospect_name(self, prospect_name: str) -> int:
+        pid = self.get_prospect_id_by_name(prospect_name)
+        if pid is None:
+            raise ValueError("Prospecto no encontrado")
+        if self.client_exists_for_prospect(pid):
+            raise ValueError("Ya existe un cliente para este lead")
+        p = self.get_prospect_by_id(pid)
+        if not p:
+            raise ValueError("Prospecto no encontrado")
+        data = {
+            "prospect_id": pid,
+            "display_name": p.name,
+            "category": p.category,
+            "phone": p.get_best_phone(),
+            "contact_email": p.ig_email or "",
+            "notes": (p.notes or "")[:2000],
+            "stage": "quote_sent",
+            "latitude": float(p.latitude or 0),
+            "longitude": float(p.longitude or 0),
+        }
+        return self.insert_client(data)

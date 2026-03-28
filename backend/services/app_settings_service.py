@@ -1,0 +1,149 @@
+"""App settings: env defaults merged with SQLite overrides."""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from backend.config.settings import settings
+
+SETTING_KEYS = frozenset(
+    {
+        "default_city",
+        "default_scrape_limit",
+        "map_center_lat",
+        "map_center_lng",
+        "map_zoom",
+        "ig_min_delay",
+        "ig_max_delay",
+        "max_results_per_category",
+        "scraper_headless",
+        "whatsapp_min_delay",
+        "whatsapp_max_delay",
+        "whatsapp_max_daily",
+        "whatsapp_phone",
+        "lovable_timeout",
+        "lovable_headless",
+        "whatsapp_templates",
+    }
+)
+
+_DEFAULT_TEMPLATES: list[dict[str, str]] = [
+    {
+        "id": "first_contact",
+        "name": "Primer contacto (envío con demo)",
+        "template": (
+            "Hola {first_name}, vimos *{name}* en {city} ({category}). "
+            "Tienen ~{followers} seguidores en IG {instagram_handle}. "
+            "Les dejamos una demo: {demo_url}\n"
+            "¿Les interesa una llamada de 10 min?"
+        ),
+    },
+    {
+        "id": "demo_followup",
+        "name": "Seguimiento demo",
+        "template": (
+            "Hola equipo de {name}, ¿qué tal? "
+            "¿Pudieron ver la demo? {demo_url}\n"
+            "Cualquier duda, estamos en {phone}."
+        ),
+    },
+    {
+        "id": "direct_offer",
+        "name": "Oferta directa",
+        "template": (
+            "Hola {name}, ayudamos a negocios como el suyo en {category} ({address}). "
+            "Rating {rating}★ ({reviews_count} reseñas). "
+            "¿Les gustaría una propuesta sin compromiso?"
+        ),
+    },
+]
+
+DEFAULT_WHATSAPP_TEMPLATES_JSON = json.dumps(_DEFAULT_TEMPLATES, ensure_ascii=False)
+
+
+def _defaults_as_strings() -> dict[str, str]:
+    s = settings
+    return {
+        "default_city": s.scraper.city,
+        "default_scrape_limit": "20",
+        "map_center_lat": "6.2442",
+        "map_center_lng": "-75.5812",
+        "map_zoom": "13",
+        "ig_min_delay": str(s.scraper.ig_min_delay),
+        "ig_max_delay": str(s.scraper.ig_max_delay),
+        "max_results_per_category": str(s.scraper.max_results_per_category),
+        "scraper_headless": "true" if s.scraper.headless else "false",
+        "whatsapp_min_delay": str(s.outreach.whatsapp_min_delay),
+        "whatsapp_max_delay": str(s.outreach.whatsapp_max_delay),
+        "whatsapp_max_daily": str(s.outreach.whatsapp_max_daily),
+        "whatsapp_phone": s.outreach.whatsapp_phone,
+        "lovable_timeout": str(s.generator.lovable_timeout),
+        "lovable_headless": "true" if s.generator.lovable_headless else "false",
+        "whatsapp_templates": DEFAULT_WHATSAPP_TEMPLATES_JSON,
+    }
+
+
+def _merged_strings(db) -> dict[str, str]:
+    base = _defaults_as_strings()
+    base.update(db.get_app_settings_raw())
+    return base
+
+
+def _parse_bool(v: str) -> bool:
+    return str(v).lower() in ("1", "true", "yes", "on")
+
+
+def typed_public_settings(db) -> dict[str, Any]:
+    m = _merged_strings(db)
+    templates_raw = m.get("whatsapp_templates") or DEFAULT_WHATSAPP_TEMPLATES_JSON
+    try:
+        templates = json.loads(templates_raw)
+        if not isinstance(templates, list):
+            templates = json.loads(DEFAULT_WHATSAPP_TEMPLATES_JSON)
+    except json.JSONDecodeError:
+        templates = json.loads(DEFAULT_WHATSAPP_TEMPLATES_JSON)
+
+    return {
+        "default_city": m["default_city"],
+        "default_scrape_limit": int(float(m["default_scrape_limit"])),
+        "map_center_lat": float(m["map_center_lat"]),
+        "map_center_lng": float(m["map_center_lng"]),
+        "map_zoom": int(float(m["map_zoom"])),
+        "ig_min_delay": float(m["ig_min_delay"]),
+        "ig_max_delay": float(m["ig_max_delay"]),
+        "max_results_per_category": int(float(m["max_results_per_category"])),
+        "scraper_headless": _parse_bool(m["scraper_headless"]),
+        "whatsapp_min_delay": int(float(m["whatsapp_min_delay"])),
+        "whatsapp_max_delay": int(float(m["whatsapp_max_delay"])),
+        "whatsapp_max_daily": int(float(m["whatsapp_max_daily"])),
+        "whatsapp_phone": m["whatsapp_phone"],
+        "lovable_timeout": int(float(m["lovable_timeout"])),
+        "lovable_headless": _parse_bool(m["lovable_headless"]),
+        "whatsapp_templates": templates,
+    }
+
+
+def patch_body_to_storage(body: dict[str, Any]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for k, v in body.items():
+        if k not in SETTING_KEYS:
+            continue
+        if k == "whatsapp_templates":
+            if not isinstance(v, list):
+                raise ValueError("whatsapp_templates debe ser un arreglo")
+            out[k] = json.dumps(v, ensure_ascii=False)
+        elif isinstance(v, bool):
+            out[k] = "true" if v else "false"
+        else:
+            out[k] = str(v).strip()
+    return out
+
+
+def scrape_runtime_options(db) -> dict[str, Any]:
+    t = typed_public_settings(db)
+    return {
+        "scraper_headless": t["scraper_headless"],
+        "default_city": t["default_city"],
+        "default_scrape_limit": t["default_scrape_limit"],
+    }

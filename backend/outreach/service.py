@@ -24,7 +24,7 @@ class OutreachService:
         if not phone:
             return {"error": "No se encontró un número de teléfono válido."}
 
-        message = build_whatsapp_message(prospect)
+        message = build_whatsapp_message(prospect, self.db)
 
         try:
 

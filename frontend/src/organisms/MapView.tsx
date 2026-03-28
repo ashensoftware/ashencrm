@@ -4,23 +4,27 @@ import "leaflet.markercluster";
 import type { Prospect } from "../types";
 import type { Hexagon } from "../types";
 import { mapStatusToColor } from "../utils";
-import { LABELS, MAP_CENTER, MAP_ZOOM } from "../constants";
+import { LABELS, MAP_CENTER as DEFAULT_MAP_CENTER, MAP_ZOOM as DEFAULT_MAP_ZOOM } from "../constants";
 
 interface Props {
   prospects: Prospect[];
   hexagons: Hexagon[];
   selectedProspect: Prospect | null;
   onHexClick: (hex: unknown, latlng: { lat: number; lng: number }) => void;
+  mapCenter?: { lat: number; lng: number };
+  mapZoom?: number;
 }
 
-export function MapView({ prospects, hexagons, selectedProspect, onHexClick }: Props) {
+export function MapView({ prospects, hexagons, selectedProspect, onHexClick, mapCenter, mapZoom }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   // @ts-ignore - leaflet.markercluster types not in @types/leaflet
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
   const hexLayerRef = useRef<L.LayerGroup | null>(null);
 
   useEffect(() => {
-    const map = L.map("map").setView([MAP_CENTER.lat, MAP_CENTER.lng], MAP_ZOOM);
+    const center = mapCenter ?? DEFAULT_MAP_CENTER;
+    const zoom = mapZoom ?? DEFAULT_MAP_ZOOM;
+    const map = L.map("map").setView([center.lat, center.lng], zoom);
     mapRef.current = map;
 
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
@@ -48,6 +52,14 @@ export function MapView({ prospects, hexagons, selectedProspect, onHexClick }: P
       hexLayerRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const center = mapCenter ?? DEFAULT_MAP_CENTER;
+    const zoom = mapZoom ?? DEFAULT_MAP_ZOOM;
+    map.setView([center.lat, center.lng], zoom);
+  }, [mapCenter?.lat, mapCenter?.lng, mapZoom]);
 
   useEffect(() => {
     const cluster = clusterRef.current;

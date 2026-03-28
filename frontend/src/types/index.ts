@@ -41,6 +41,32 @@ export interface ProspectFilters {
 export interface CatalogItem {
   name: string;
   label: string;
+  icon?: string;
+}
+
+export interface WhatsappTemplate {
+  id: string;
+  name: string;
+  template: string;
+}
+
+export interface AppSettings {
+  default_city: string;
+  default_scrape_limit: number;
+  map_center_lat: number;
+  map_center_lng: number;
+  map_zoom: number;
+  ig_min_delay: number;
+  ig_max_delay: number;
+  max_results_per_category: number;
+  scraper_headless: boolean;
+  whatsapp_min_delay: number;
+  whatsapp_max_delay: number;
+  whatsapp_max_daily: number;
+  whatsapp_phone: string;
+  lovable_timeout: number;
+  lovable_headless: boolean;
+  whatsapp_templates: WhatsappTemplate[];
 }
 
 export interface Hexagon {

@@ -12,6 +12,7 @@ ROOT_DIR = Path(__file__).parent.parent
 sys.path.append(str(ROOT_DIR))
 
 from backend.api.routes.catalog import create_catalog_router
+from backend.api.routes.admin import create_admin_router
 from backend.api.routes.prospects import create_prospects_router
 from backend.api.routes.scrape import create_scrape_router
 from backend.api.routes.screenshots import router as screenshots_router
@@ -38,6 +39,7 @@ db = Database()
 scrape_service = ScrapeService(db)
 app.include_router(create_prospects_router(db))
 app.include_router(create_catalog_router(db))
+app.include_router(create_admin_router(db))
 app.include_router(create_scrape_router(scrape_service))
 app.include_router(screenshots_router)
 

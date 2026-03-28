@@ -1,4 +1,4 @@
-import type { Prospect, ProspectFilters } from "../types";
+﻿import type { Prospect, ProspectFilters, AppSettings, CatalogItem } from "../types";
 
 const BASE = "/api";
 
@@ -12,7 +12,7 @@ export function createRequest() {
 
 const request = createRequest();
 
-export async function fetchCatalog(): Promise<{ name: string; label: string }[]> {
+export async function fetchCatalog(): Promise<CatalogItem[]> {
   return (await request("/catalog/categories")).json();
 }
 
@@ -70,8 +70,8 @@ export async function fetchRandomProspect(status = "scraped"): Promise<Prospect 
     const res = await request(`/prospects/random?status=${status}`);
     if (!res.ok) return { message: "Error al obtener prospecto" };
     return await res.json();
-  } catch (err) {
-    return { message: "Error de conexión con el servidor" };
+  } catch {
+    return { message: "Error de conexion con el servidor" };
   }
 }
 
@@ -81,6 +81,42 @@ export async function automateProspect(name: string) {
 
 export async function sendWhatsApp(name: string) {
   return (await request(`/prospects/${encodeURIComponent(name)}/send-whatsapp`, { method: "POST" })).json();
+}
+
+export async function fetchAdminSettings(): Promise<AppSettings> {
+  const res = await request("/admin/settings");
+  if (!res.ok) throw new Error("No se pudieron cargar los ajustes");
+  return res.json();
+}
+
+export async function patchAdminSettings(partial: Partial<AppSettings>): Promise<AppSettings> {
+  const res = await request("/admin/settings", { method: "PATCH", body: JSON.stringify(partial) });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || "Error al guardar");
+  }
+  return res.json();
+}
+
+export function patchCatalogCategory(name: string, body: { label?: string; icon?: string }) {
+  return request(`/catalog/categories/${encodeURIComponent(name)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function renameCatalogCategory(oldName: string, newName: string) {
+  return request("/catalog/categories/rename", {
+    method: "PUT",
+    body: JSON.stringify({ old_name: oldName, new_name: newName }),
+  });
+}
+
+export function resetCategoryAssignments(category: string) {
+  return request("/prospects/categories/reset-assignment", {
+    method: "POST",
+    body: JSON.stringify({ category }),
+  });
 }
 
 export function getScreenshotUrl(path?: string): string | null {

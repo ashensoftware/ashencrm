@@ -31,3 +31,50 @@
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 .fade-in-scale { animation: fadeInScale 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+/* Modal selector de iconos Lucide (admin categorías) */
+.modal-content.icon-picker-modal { width: min(720px, 96vw); max-height: 88vh; }
+.icon-picker-search-wrap { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+.icon-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 0.5rem;
+  overflow-y: auto;
+  max-height: min(52vh, 420px);
+  padding: 0.25rem;
+  margin: 0 -0.25rem;
+}
+.icon-picker-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.65rem 0.4rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.icon-picker-cell:hover {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+}
+.icon-picker-cell--active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-muted);
+}
+.icon-picker-cell-label {
+  font-size: 0.65rem;
+  line-height: 1.15;
+  text-align: center;
+  color: var(--text-secondary);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}

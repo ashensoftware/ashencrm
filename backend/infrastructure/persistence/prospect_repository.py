@@ -10,24 +10,27 @@ from typing import Optional
 from backend.config.settings import settings
 from backend.domain.prospect import Prospect, ProspectStatus
 
+# (name, label, default_lucide_icon_id) — iconos persistidos en category_catalog.icon
 DEFAULT_CATEGORIES = [
-    ("cafe", "Cafe"),
-    ("restaurante", "Restaurante"),
-    ("gimnasio", "Gimnasio"),
-    ("barberia", "Barberia"),
-    ("odontologia", "Odontologia"),
-    ("veterinaria", "Veterinaria"),
-    ("ferreteria", "Ferreteria"),
-    ("panaderia", "Panaderia"),
-    ("estetica", "Estetica"),
-    ("taller", "Taller"),
-    ("petshop", "Pet Shop"),
-    ("coworking", "Coworking"),
-    ("reposteria", "Reposteria"),
-    ("spa", "Spa"),
-    ("tienda", "Tienda de Ropa"),
-    ("otros", "Otros Negocios"),
+    ("cafe", "Cafe", "Coffee"),
+    ("restaurante", "Restaurante", "UtensilsCrossed"),
+    ("gimnasio", "Gimnasio", "Dumbbell"),
+    ("barberia", "Barberia", "Scissors"),
+    ("odontologia", "Odontologia", "Stethoscope"),
+    ("veterinaria", "Veterinaria", "Dog"),
+    ("ferreteria", "Ferreteria", "Hammer"),
+    ("panaderia", "Panaderia", "CakeSlice"),
+    ("estetica", "Estetica", "Sparkles"),
+    ("taller", "Taller", "Wrench"),
+    ("petshop", "Pet Shop", "Dog"),
+    ("coworking", "Coworking", "Laptop"),
+    ("reposteria", "Reposteria", "CakeSlice"),
+    ("spa", "Spa", "Sparkles"),
+    ("tienda", "Tienda de Ropa", "Shirt"),
+    ("otros", "Otros Negocios", "Briefcase"),
 ]
+
+MIGRATION_CATEGORY_DEFAULT_ICONS_V1 = "migration_category_default_icons_v1"
 
 
 class ProspectRepository:
@@ -99,13 +102,19 @@ class ProspectRepository:
                     ig_email_non_empty INTEGER DEFAULT 0,
                     ig_phone_non_empty INTEGER DEFAULT 0
                 );
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
             """)
             cur = conn.execute("SELECT COUNT(*) FROM category_catalog")
             if cur.fetchone()[0] == 0:
                 conn.executemany(
-                    "INSERT INTO category_catalog (name, label) VALUES (?, ?)",
+                    "INSERT INTO category_catalog (name, label, icon) VALUES (?, ?, ?)",
                     DEFAULT_CATEGORIES,
                 )
+            self._maybe_backfill_default_category_icons(conn)
             try:
                 conn.execute(
                     "ALTER TABLE prospects ADD COLUMN is_contacted INTEGER DEFAULT 0"
@@ -119,6 +128,31 @@ class ProspectRepository:
             except sqlite3.OperationalError:
                 pass
             conn.commit()
+
+    def _maybe_backfill_default_category_icons(self, conn: sqlite3.Connection) -> None:
+        """Una sola vez: rellena icon Lucide vacío según DEFAULT_CATEGORIES (BD existentes)."""
+        if conn.execute(
+            "SELECT 1 FROM app_settings WHERE key = ?",
+            (MIGRATION_CATEGORY_DEFAULT_ICONS_V1,),
+        ).fetchone():
+            return
+        for name, _label, icon in DEFAULT_CATEGORIES:
+            conn.execute(
+                "UPDATE category_catalog SET icon = ? WHERE name = ? AND (icon IS NULL OR TRIM(icon) = '')",
+                (icon, name),
+            )
+        conn.execute(
+            """
+            INSERT INTO app_settings (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """,
+            (
+                MIGRATION_CATEGORY_DEFAULT_ICONS_V1,
+                "1",
+                datetime.now().isoformat(),
+            ),
+        )
 
     def insert_prospect(self, prospect: Prospect) -> bool:
         try:
@@ -259,6 +293,76 @@ class ProspectRepository:
                 "UPDATE prospects SET category = ? WHERE category = ?",
                 (new_name, old_name),
             )
+            conn.commit()
+
+    def rename_category_globally(self, old_name: str, new_name: str) -> None:
+        """Rename catalog id and all prospect rows using that category (transactional)."""
+        if not old_name or not new_name or old_name == new_name:
+            raise ValueError("Nombres invalidos")
+        with self._conn() as conn:
+            cat = conn.execute(
+                "SELECT 1 FROM category_catalog WHERE name = ?", (old_name,)
+            ).fetchone()
+            if not cat:
+                raise ValueError("La categoria no existe en el catalogo")
+            taken = conn.execute(
+                "SELECT 1 FROM category_catalog WHERE name = ?", (new_name,)
+            ).fetchone()
+            if taken:
+                raise ValueError("Ya existe una categoria con ese id")
+            conn.execute(
+                "UPDATE prospects SET category = ? WHERE category = ?",
+                (new_name, old_name),
+            )
+            conn.execute(
+                "UPDATE category_catalog SET name = ? WHERE name = ?",
+                (new_name, old_name),
+            )
+            conn.commit()
+
+    def patch_catalog_category(
+        self, name: str, label: Optional[str] = None, icon: Optional[str] = None
+    ) -> bool:
+        if label is None and icon is None:
+            return False
+        sets: list[str] = []
+        params: list = []
+        if label is not None:
+            sets.append("label = ?")
+            params.append(label)
+        if icon is not None:
+            sets.append("icon = ?")
+            params.append(icon)
+        params.append(name)
+        with self._conn() as conn:
+            cur = conn.execute(
+                f"UPDATE category_catalog SET {', '.join(sets)} WHERE name = ?",
+                params,
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def get_app_settings_raw(self) -> dict[str, str]:
+        with self._conn() as conn:
+            rows = conn.execute("SELECT key, value FROM app_settings").fetchall()
+            return {str(r["key"]): str(r["value"]) for r in rows}
+
+    def upsert_app_settings(self, partial: dict[str, str]) -> None:
+        if not partial:
+            return
+        now = datetime.now().isoformat()
+        with self._conn() as conn:
+            for k, v in partial.items():
+                conn.execute(
+                    """
+                    INSERT INTO app_settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET
+                        value = excluded.value,
+                        updated_at = excluded.updated_at
+                    """,
+                    (k, v, now),
+                )
             conn.commit()
 
     def delete_category(self, category: str) -> None:

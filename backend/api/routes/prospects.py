@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 import h3
-from backend.models.schemas import PatchProspectData, RenameCategoryRequest
+from backend.models.schemas import PatchProspectData, ResetCategoryAssignmentBody
 from backend.domain.prospect import ProspectStatus
 from backend.core.config import H3_RESOLUTION
 from backend.generator.prompt_builder import build_demo_prompt
@@ -343,23 +343,16 @@ def create_prospects_router(db):
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    @router.put("/api/categories")
-    async def rename_category(data: dict):
-        """Renombra una categoría globalmente."""
+    @router.post("/prospects/categories/reset-assignment")
+    async def reset_category_assignment(body: ResetCategoryAssignmentBody):
+        """Pone "Sin categoría" en todos los leads que tenían esta categoría."""
         try:
-            old_name = data.get("old_name")
-            new_name = data.get("new_name")
-            db.update_category(old_name, new_name)
-            return {"message": "Categoría renombrada"}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @router.delete("/api/categories/{category}")
-    async def delete_category(category: str):
-        """Borra una categoría (la resetea)."""
-        try:
-            db.delete_category(category)
-            return {"message": "Categoría borrada"}
+            if not body.category.strip():
+                raise HTTPException(status_code=400, detail="Categoría vacía")
+            db.delete_category(body.category)
+            return {"message": "Asignaciones de categoría reiniciadas"}
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

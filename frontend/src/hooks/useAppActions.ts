@@ -11,12 +11,13 @@ import {
 import { MSG, LABELS, DEFAULT_CITY, DEFAULT_SCRAPE_LIMIT } from "../constants";
 import { useModals } from "./useModals";
 import { useScanner } from "./useScanner";
-import type { Prospect } from "../types";
+import type { Prospect, AppSettings } from "../types";
 
 export function useAppActions(
   refresh: (silent?: boolean) => Promise<void>,
   refreshCatalog: () => Promise<void>,
-  catalog: { name: string; label: string }[]
+  catalog: { name: string; label: string }[],
+  appSettings: AppSettings | null
 ) {
   const navigate = useNavigate();
   const modals = useModals();
@@ -33,20 +34,23 @@ export function useAppActions(
       const opts = [{ name: "*", label: LABELS.SCRAPE_ALL_AUTO }, ...catalog];
       const res = await modals.showPrompt(LABELS.NEW_SEARCH_ZONE, LABELS.CATEGORY_SEARCH_PROMPT, "*", opts);
       if (!res) return;
-      const r = await startScrape({ category: res, city: DEFAULT_CITY, limit: DEFAULT_SCRAPE_LIMIT, lat: latlng.lat, lon: latlng.lng });
+      const city = appSettings?.default_city ?? DEFAULT_CITY;
+      const limit = appSettings?.default_scrape_limit ?? DEFAULT_SCRAPE_LIMIT;
+      const r = await startScrape({ category: res, city, limit, lat: latlng.lat, lon: latlng.lng });
       if (r.ok) { modals.setModal("scanner"); scanner.start(refresh); }
     },
-    [catalog, refresh, modals, scanner]
+    [catalog, refresh, modals, scanner, appSettings]
   );
 
   const handleScrape = useCallback(async () => {
     const category = (document.getElementById("scrape-category") as HTMLSelectElement)?.value;
-    const limit = (document.getElementById("scrape-limit") as HTMLInputElement)?.value || String(DEFAULT_SCRAPE_LIMIT);
+    const limit = (document.getElementById("scrape-limit") as HTMLInputElement)?.value || String(appSettings?.default_scrape_limit ?? DEFAULT_SCRAPE_LIMIT);
     if (!category) return modals.showAlert(MSG.ERROR, MSG.ENTER_CATEGORY);
-    const r = await startScrape({ category, city: DEFAULT_CITY, limit: parseInt(limit) });
+    const city = appSettings?.default_city ?? DEFAULT_CITY;
+    const r = await startScrape({ category, city, limit: parseInt(limit, 10) });
     if (r.ok) { modals.setModal("scanner"); scanner.start(refresh); }
     else { const err = await r.json(); modals.showAlert(MSG.ERROR, MSG.SCRAPE_START_FAIL(err.detail)); }
-  }, [refresh, modals, scanner]);
+  }, [refresh, modals, scanner, appSettings]);
 
   const handleReview = useCallback(
     async (action: string) => {

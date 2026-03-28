@@ -30,3 +30,12 @@ class PatchProspectData(BaseModel):
 class RenameCategoryRequest(BaseModel):
     old_name: str
     new_name: str
+
+
+class PatchCatalogCategory(BaseModel):
+    label: Optional[str] = None
+    icon: Optional[str] = None
+
+
+class ResetCategoryAssignmentBody(BaseModel):
+    category: str

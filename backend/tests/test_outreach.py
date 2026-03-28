@@ -1,7 +1,7 @@
 import unittest
 
 from backend.outreach.whatsapp import WhatsAppAutomation
-from backend.outreach.message_builder import build_whatsapp_message
+from backend.outreach.message_builder import build_whatsapp_message, render_whatsapp_template
 from backend.scraper.models import Prospect
 
 
@@ -23,6 +23,26 @@ class TestOutreachModule(unittest.TestCase):
         msg = build_whatsapp_message(p)
         self.assertIn("Negocio X", msg)
         self.assertIn("https://demo.example", msg)
+
+    def test_render_whatsapp_template_placeholders(self):
+        p = Prospect(
+            name="Café Norte",
+            category="cafe",
+            city="Medellín",
+            address="Calle 10",
+            demo_url="https://demo.example/x",
+            ig_followers=1200,
+            instagram_handle="@cafenorte",
+            rating=4.5,
+            reviews_count=88,
+        )
+        tpl = "Hola {first_name} — {name} en {city}. IG {instagram_handle}, {followers} seguidores. Demo: {demo_url}"
+        out = render_whatsapp_template(tpl, p)
+        self.assertIn("Café", out)
+        self.assertIn("Medellín", out)
+        self.assertIn("@cafenorte", out)
+        self.assertIn("1200", out)
+        self.assertIn("https://demo.example/x", out)
 
 
 if __name__ == "__main__":

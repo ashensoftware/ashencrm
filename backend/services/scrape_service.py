@@ -9,6 +9,7 @@ import h3
 from backend.core.config import H3_RESOLUTION
 from backend.core.logger import add_scrape_log
 from backend.scraper.google_maps import GoogleMapsScraper
+from backend.services.app_settings_service import scrape_runtime_options
 
 KEYWORDS = {
     "cafe": ["cafete", "coffee", "panader", "reposter"],
@@ -52,7 +53,8 @@ class ScrapeService:
         lon: float | None = None,
     ) -> None:
         add_scrape_log(f"Iniciando busqueda de '{category }' en {city }...")
-        scraper = GoogleMapsScraper(headless=True)
+        opts = scrape_runtime_options(self.db)
+        scraper = GoogleMapsScraper(headless=opts["scraper_headless"])
         try:
             results = await scraper.search(
                 category,

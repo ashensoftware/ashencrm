@@ -1,0 +1,20 @@
+/** Placeholders soportados por `render_whatsapp_template` en el backend (deben coincidir). */
+export const WHATSAPP_TEMPLATE_PLACEHOLDERS: { key: string; description: string }[] = [
+  { key: "name", description: "Nombre del negocio / lead" },
+  { key: "first_name", description: "Primera palabra del nombre" },
+  { key: "category", description: "Categoría del negocio" },
+  { key: "city", description: "Ciudad" },
+  { key: "address", description: "Dirección" },
+  { key: "phone", description: "Teléfono (Maps o IG)" },
+  { key: "followers", description: "Seguidores en Instagram (número)" },
+  { key: "instagram", description: "URL del perfil de Instagram" },
+  { key: "instagram_handle", description: "Usuario @ de Instagram" },
+  { key: "demo_url", description: "URL de la demo (Lovable)" },
+  { key: "website", description: "Sitio web o web en IG" },
+  { key: "rating", description: "Rating en Google Maps" },
+  { key: "reviews_count", description: "Cantidad de reseñas" },
+  { key: "email", description: "Email desde bio IG" },
+  { key: "bio", description: "Bio de Instagram (recortada)" },
+  { key: "notes", description: "Notas internas del lead" },
+  { key: "maps_url", description: "Enlace a Google Maps" },
+];

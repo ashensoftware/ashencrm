@@ -1,4 +1,9 @@
-"""Global pipeline configuration from environment."""
+"""Pipeline defaults: env solo para credenciales (OPENAI_*, LOVABLE_ACCOUNTS).
+
+Ajustes operativos (ciudad, delays, WhatsApp, mapa, headless de scrape, etc.)
+se gestionan en la UI Administración y en `app_settings` (SQLite), con fallback
+a los valores por defecto definidos aquí.
+"""
 
 import asyncio
 import json

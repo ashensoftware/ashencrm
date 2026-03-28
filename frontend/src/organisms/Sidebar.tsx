@@ -3,7 +3,7 @@ import { StatsPanel } from "./StatsPanel";
 import type { Prospect } from "../types";
 import type { ProspectFilters } from "../types";
 import type { CatalogItem } from "../types";
-import { Map, Flame, LayoutDashboard, Search, ClipboardList, Activity } from "lucide-react";
+import { Map, Flame, LayoutDashboard, Search, ClipboardList, Activity, Settings } from "lucide-react";
 
 interface Props {
   prospects: Prospect[];
@@ -11,8 +11,8 @@ interface Props {
   catalog: CatalogItem[];
   filters: ProspectFilters;
   selectedProspect: Prospect | null;
-  currentView: "overview" | "map" | "tinder" | "panel" | "todo";
-  onViewChange: (v: "overview" | "map" | "tinder" | "panel" | "todo") => void;
+  currentView: "overview" | "map" | "tinder" | "panel" | "todo" | "admin";
+  onViewChange: (v: "overview" | "map" | "tinder" | "panel" | "todo" | "admin") => void;
   optionsOpen?: boolean;
   registryOpen?: boolean;
   scrapeFormOpen: boolean;
@@ -25,6 +25,7 @@ interface Props {
   onRegistrySearchChange: (v: string) => void;
   onTinderNext?: () => void;
   onScrape: () => void;
+  defaultScrapeLimit?: number;
 }
 
 import { createPortal } from "react-dom";
@@ -39,6 +40,7 @@ export function Sidebar({
   onFiltersChange,
   onScrapeFormToggle,
   onScrape,
+  defaultScrapeLimit,
 }: Props) {
   return (
     <>
@@ -76,6 +78,14 @@ export function Sidebar({
         >
           <LayoutDashboard size={18} /> Gestión de Leads
         </button>
+        <button 
+          className={currentView === 'admin' ? 'btn-primary' : 'btn-secondary'} 
+          onClick={() => onViewChange('admin')}
+          style={{ width: '100%', justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+        >
+          <Settings size={18} /> Administracion
+        </button>
+
         <button 
           className={currentView === 'todo' ? 'btn-primary' : 'btn-secondary'} 
           onClick={() => onViewChange('todo')}
@@ -131,7 +141,7 @@ export function Sidebar({
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Límite Máximo (Leads)</label>
-                <input type="number" id="scrape-limit" className="dialog-input" defaultValue={20} min={1} max={500} style={{ width: '100%', padding: '0.85rem' }} />
+                <input type="number" id="scrape-limit" className="dialog-input" key={defaultScrapeLimit ?? 20} defaultValue={defaultScrapeLimit ?? 20} min={1} max={500} style={{ width: '100%', padding: '0.85rem' }} />
               </div>
             </div>
             <button className="btn-primary" onClick={() => { onScrapeFormToggle(); onScrape(); }} style={{ width: '100%', padding: '1rem', fontSize: '1rem', fontWeight: 600, display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>

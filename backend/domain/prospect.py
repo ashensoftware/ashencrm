@@ -9,6 +9,7 @@ import json
 
 class ProspectStatus(str, Enum):
     SCRAPED = "scraped"
+    WAITING = "waiting"
     IG_CHECKED = "ig_checked"
     HAS_WEBSITE = "has_website"
     READY = "ready"
@@ -46,6 +47,7 @@ class Prospect:
     screenshot_path: str = ""
     lovable_account_used: str = ""
     prompt_used: str = ""
+    whatsapp_message: str = ""
     status: str = ProspectStatus.SCRAPED.value
     scraped_at: str = ""
     contacted_at: Optional[str] = None

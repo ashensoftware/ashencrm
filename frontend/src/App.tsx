@@ -1,14 +1,18 @@
-import { useMemo } from "react";
+import { useMemo, lazy, Suspense } from "react";
 import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
 import { Sidebar } from "./organisms/Sidebar";
-import { MapView } from "./organisms/MapView";
 import { ProspectDetailModal } from "./organisms/modals/ProspectDetailModal";
-import { AlertModal, PromptModal, CategoryModal, EditModal, ScannerModal } from "./organisms/modals";
-import { DashboardPage, KanbanPage, TinderPage, PanelPage } from "./pages";
+import { AlertModal, PromptModal, CategoryModal, EditModal, ScannerModal, AddProspectModal } from "./organisms/modals";
+import { DashboardPage } from "./pages"; // Dashboard starts visible, don't lazy load
 import { useProspects } from "./hooks/useProspects";
 import { useAppActions } from "./hooks/useAppActions";
 import { updateProspect, sendWhatsApp } from "./api";
 import { MSG, LABELS } from "./constants";
+
+const MapView = lazy(() => import("./organisms/MapView").then((m) => ({ default: m.MapView })));
+const TinderPage = lazy(() => import("./pages").then((m) => ({ default: m.TinderPage })));
+const KanbanPage = lazy(() => import("./pages").then((m) => ({ default: m.KanbanPage })));
+const PanelPage = lazy(() => import("./pages").then((m) => ({ default: m.PanelPage })));
 
 const VIEW_TO_ROUTE: Record<string, string> = { overview: "/", map: "/map", tinder: "/tinder", panel: "/panel", todo: "/kanban" };
 const ROUTE_TO_VIEW: Record<string, "overview" | "map" | "tinder" | "panel" | "todo"> = { "/": "overview", "/map": "map", "/tinder": "tinder", "/panel": "panel", "/kanban": "todo" };
@@ -34,16 +38,16 @@ function App() {
         onSelectProspect={(p) => { navigate("/map"); setSelectedProspect(p); modals.setModal("detail"); }}
         onScrapeFormToggle={() => actions.setScrapeFormOpen((o) => !o)}
         onRegistrySearchChange={actions.setRegistrySearch}
-        onCategoryManage={() => modals.setModal("category")}
         onScrape={actions.handleScrape}
       />
 
       <main className="main-content">
-        <Routes>
-          <Route path="/" element={<DashboardPage prospects={prospects} />} />
-          <Route path="/map" element={<MapView prospects={prospects} hexagons={hexagons} selectedProspect={selectedProspect} onHexClick={actions.handleHexClick} />} />
-          <Route path="/tinder" element={
-            <TinderPage 
+        <Suspense fallback={<div style={{display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)'}}>Cargando página...</div>}>
+          <Routes>
+            <Route path="/" element={<DashboardPage prospects={prospects} />} />
+            <Route path="/map" element={<MapView prospects={prospects} hexagons={hexagons} selectedProspect={selectedProspect} onHexClick={actions.handleHexClick} />} />
+            <Route path="/tinder" element={
+              <TinderPage 
               prospect={selectedProspect}
               onClose={() => { modals.setModal(null); navigate("/panel"); }}
               onReject={() => actions.handleReview("reject")}
@@ -64,9 +68,19 @@ function App() {
               onChangeStatus={async (name, status) => { const r = await updateProspect(name, { status }); if (r.ok) await refresh(); }}
             />
           } />
-          <Route path="/panel" element={<PanelPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route path="/panel" element={
+              <PanelPage 
+                prospects={prospects} 
+                filters={filters} 
+                catalog={catalog} 
+                onFiltersChange={setFilters} 
+                onAddProspect={() => modals.setModal("add")} 
+                onSelectProspect={(p) => { setSelectedProspect(p); modals.setModal("detail"); }} 
+              />
+            } />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </main>
 
       {modals.modal === "alert" && <AlertModal title={modals.alertState.title} message={modals.alertState.message} onClose={() => { modals.closeAlert(); modals.setModal(null); }} />}
@@ -81,6 +95,7 @@ function App() {
         />
       )}
       {modals.modal === "edit" && selectedProspect && <EditModal prospect={selectedProspect} form={actions.editForm} catalog={catalog} onFormChange={actions.setEditForm} onClose={() => modals.setModal(null)} onSubmit={actions.handleEditSubmit} />}
+      {modals.modal === "add" && <AddProspectModal catalog={catalog} onClose={() => modals.setModal(null)} onSubmit={actions.handleAddProspectSubmit} />}
       {modals.modal === "category" && <CategoryModal catalog={catalog} onClose={() => modals.setModal(null)} onDelete={actions.handleCategoryDelete} onAdd={async () => { await actions.handleCategoryAdd(); modals.setModal(null); }} />}
       {modals.modal === "scanner" && !scanner.minimized && <ScannerModal logs={scanner.logs} active={scanner.active} onMinimize={() => { scanner.minimize(); modals.setModal(null); }} />}
       {scanner.minimized && scanner.active && (

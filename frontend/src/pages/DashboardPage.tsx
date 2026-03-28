@@ -1,5 +1,5 @@
 import type { Prospect } from "../types";
-import { Users, Target, CheckCircle, Clock, Activity, BarChart2 } from "lucide-react";
+import { Users, Target, CheckCircle, Clock, Activity, BarChart2, Trophy, Award, Tag, Star } from "lucide-react";
 
 interface Props {
   prospects: Prospect[];
@@ -7,16 +7,15 @@ interface Props {
 
 export function DashboardPage({ prospects }: Props) {
   const total = prospects.length;
-  const inPipelineStatuses = ["ready", "prompt_gpt", "creating_demo", "demo_created", "contacted"];
+  const inPipelineStatuses = ["waiting", "prompt_gpt", "demo_created", "contacted"];
   const inPipeline = prospects.filter(p => inPipelineStatuses.includes(p.status || "")).length;
   const clientsWon = prospects.filter(p => p.status === "client_won").length;
   const untouchable = prospects.filter(p => p.status === "scraped" || !p.status).length;
 
   const FUNNEL_STAGES = [
-    { id: "scraped", label: "Nuevos Scrap", color: "#8b5cf6" },
-    { id: "ready", label: "Potencial", color: "#58a6ff" },
+    { id: "scraped", label: "Potencial", color: "#8b5cf6" },
+    { id: "waiting", label: "En Espera", color: "#58a6ff" },
     { id: "prompt_gpt", label: "Prompt GPT", color: "#f59e0b" },
-    { id: "creating_demo", label: "Creando Demo", color: "#f97316" },
     { id: "demo_created", label: "Demo Lista", color: "#a78bfa" },
     { id: "contacted", label: "Contactados", color: "#2ea043" },
     { id: "client_won", label: "Clientes", color: "#10b981" },
@@ -28,7 +27,8 @@ export function DashboardPage({ prospects }: Props) {
   }));
 
   const categoryCounts = prospects.reduce((acc, p) => {
-    const cat = p.category || "Sin Categoría";
+    const cat = p.category ? p.category.trim() : "";
+    if (!cat || cat === "*" || cat === "N/A" || cat === "Sin Categoría") return acc;
     acc[cat] = (acc[cat] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
@@ -79,15 +79,20 @@ export function DashboardPage({ prospects }: Props) {
         </section>
 
         <section style={{ background: "var(--bg-card)", padding: "1.5rem", borderRadius: "1rem", border: "1px solid var(--border)" }}>
-          <h2 style={{ fontSize: "1.25rem", marginBottom: "1.5rem" }}>Top Categorías</h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <h2 style={{ fontSize: "1.25rem", marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <Star size={20} color="var(--warning)" /> Top Categorías
+          </h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
             {topCategories.map(([category, count], idx) => (
-              <div key={category} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border)" }}>
+              <div key={category} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.8rem 1rem", background: "rgba(255,255,255,0.02)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", transition: "all 0.2s" }} className="table-row-hover">
                 <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                  <span style={{ color: "var(--text-muted)", fontSize: "0.85rem", fontWeight: 700 }}>#{idx + 1}</span>
-                  <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>{category}</span>
+                  {idx === 0 ? <Trophy size={18} color="#fbbf24" /> :
+                   idx === 1 ? <Award size={18} color="#94a3b8" /> :
+                   idx === 2 ? <Award size={18} color="#d97706" /> :
+                               <Tag size={18} color="var(--text-muted)" />}
+                  <span style={{ fontWeight: 600, fontSize: "0.95rem", textTransform: "capitalize", color: "var(--text-primary)" }}>{category.toLowerCase()}</span>
                 </div>
-                <span style={{ background: "rgba(255,255,255,0.1)", padding: "0.15rem 0.6rem", borderRadius: "99px", fontSize: "0.8rem", fontWeight: "bold" }}>{count}</span>
+                <span style={{ background: "var(--accent-muted)", color: "var(--text-primary)", padding: "0.2rem 0.6rem", borderRadius: "99px", fontSize: "0.75rem", fontWeight: "bold", border: "1px solid var(--accent)" }}>{count} leads</span>
               </div>
             ))}
           </div>

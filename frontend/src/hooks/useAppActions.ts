@@ -6,6 +6,7 @@ import {
   updateProspect,
   fetchRandomProspect,
   sendWhatsApp,
+  createProspect,
 } from "../api";
 import { MSG, LABELS, DEFAULT_CITY, DEFAULT_SCRAPE_LIMIT } from "../constants";
 import { useModals } from "./useModals";
@@ -142,6 +143,22 @@ export function useAppActions(
     modals.showAlert("WhatsApp", MSG.WHATSAPP_SENDING);
   }, [selectedProspect, modals]);
 
+  const handleAddProspectSubmit = useCallback(async (data: Partial<Prospect>) => {
+    try {
+      const r = await createProspect(data);
+      if (r.ok) {
+        modals.setModal(null);
+        await modals.showAlert(MSG.SUCCESS, "Prospecto creado exitosamente.");
+        refresh(true);
+      } else {
+        const err = await r.json();
+        await modals.showAlert(MSG.ERROR, err.detail || "Error al crear el prospecto.");
+      }
+    } catch (e: any) {
+      await modals.showAlert(MSG.ERROR, "Error de red al crear el prospecto.");
+    }
+  }, [modals, refresh]);
+
   return {
     modals,
     scanner,
@@ -165,5 +182,6 @@ export function useAppActions(
     handleAdvanceStatus,
     handleGenerateDemo,
     handleWhatsApp,
+    handleAddProspectSubmit,
   };
 }

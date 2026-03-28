@@ -195,6 +195,8 @@ class GoogleMapsScraper:
                             continue
                         if "facebook.com" in u_l:
                             continue
+                        if "duckduckgo.com" in u_l:
+                            continue
                         website = u
                         break
 
@@ -209,9 +211,8 @@ class GoogleMapsScraper:
                     phone = ""
                     address = city
                     for line in lines:
-                        if (line.startswith("+57") or line.startswith("3")) and len(
-                            line
-                        ) >= 10:
+                        cl_line = re.sub(r"[^0-9+]", "", line)
+                        if (line.startswith("+57") or line.startswith("3")) and 10 <= len(cl_line) <= 13:
                             phone = line
                         elif city.lower() in line.lower() or any(
                             k in line.lower()
@@ -254,7 +255,9 @@ class GoogleMapsScraper:
                                     continue
                                 if "facebook.com" in href_l:
                                     continue
-                                if re.search(r"\\.[a-z]{2,}(/|$)", href_l):
+                                if "duckduckgo.com" in href_l:
+                                    continue
+                                if re.search(r"\.[a-z]{2,}(/|$)", href_l):
                                     detail_website = href.rstrip(".")
                                     break
 

@@ -27,6 +27,7 @@
 .prospects-list li:hover { background: rgba(255, 255, 255, 0.04); }
 .prospects-list li.selected { background: var(--accent-muted); border-left: 3px solid var(--accent); }
 .prospects-list .p-name { font-weight: 600; font-size: 0.95rem; display: block; margin-bottom: 0.2rem; }
+.table-row-hover:hover { background: rgba(255, 255, 255, 0.04) !important; }
 .prospects-list .p-meta { font-size: 0.8rem; color: var(--text-secondary); }
 .p-tags { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-top: 0.4rem; }
 .empty-state { padding: 2.5rem 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.9rem; }

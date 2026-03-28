@@ -19,6 +19,9 @@ export interface Prospect {
   ig_website?: string;
   demo_url?: string;
   screenshot_path?: string;
+  prompt_used?: string;
+  lovable_account_used?: string;
+  whatsapp_message?: string;
   status?: string;
   scraped_at?: string;
   is_contacted?: boolean;
@@ -52,4 +55,4 @@ export interface StatusInfo {
   class: string;
 }
 
-export type ModalType = "alert" | "prompt" | "category" | "edit" | "detail" | "scanner" | null;
+export type ModalType = "alert" | "prompt" | "category" | "edit" | "detail" | "add" | "scanner" | null;

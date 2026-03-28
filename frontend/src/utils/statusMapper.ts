@@ -2,11 +2,10 @@ import type { Prospect } from "../types";
 import type { StatusInfo } from "../types";
 
 const STATUS_MAP: Record<string, StatusInfo> = {
-  scraped: { label: "NUEVO", class: "scraped" },
-  ready: { label: "POTENCIAL", class: "potential" },
+  scraped: { label: "POTENCIAL", class: "potential" },
+  waiting: { label: "EN ESPERA", class: "waiting" },
   prompt_gpt: { label: "PROMPT GPT", class: "prompt_gpt" },
-  creating_demo: { label: "CREANDO DEMO", class: "creating_demo" },
-  demo_created: { label: "DEMO", class: "demo_created" },
+  demo_created: { label: "DEMO COMPLETA", class: "demo_created" },
   has_website: { label: "CON WEB", class: "has_website" },
   rejected: { label: "RECHAZADO", class: "rejected" },
   contacted: { label: "CONTACTADO", class: "contacted" },
@@ -25,9 +24,8 @@ export function mapStatusToInfo(p: Prospect | null): StatusInfo {
 
 const STATUS_COLORS: Record<string, string> = {
   scraped: "#8b5cf6",
-  ready: "#58a6ff",
+  waiting: "#58a6ff",
   prompt_gpt: "#f59e0b",
-  creating_demo: "#f97316",
   demo_created: "#a78bfa",
   has_website: "#22c55e",
   contacted: "#2ea043",
@@ -40,11 +38,10 @@ export function mapStatusToColor(status?: string): string {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  scraped: "Nuevo",
-  ready: "Potencial",
+  scraped: "Potencial",
+  waiting: "En Espera",
   prompt_gpt: "Prompt GPT",
-  creating_demo: "Creando Demo",
-  demo_created: "Demo",
+  demo_created: "Demo Lista",
   has_website: "Con Web",
   contacted: "Contactado",
   client_won: "Cliente Obtenido",

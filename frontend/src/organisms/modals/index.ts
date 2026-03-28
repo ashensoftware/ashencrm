@@ -3,3 +3,4 @@ export { PromptModal } from "./PromptModal";
 export { CategoryModal } from "./CategoryModal";
 export { EditModal } from "./EditModal";
 export { ScannerModal } from "./ScannerModal";
+export { AddProspectModal } from "./AddProspectModal";

@@ -58,8 +58,21 @@ export function normalizeCategories() {
   return request("/prospects/normalize-categories", { method: "POST" });
 }
 
+export async function createProspect(data: Partial<Prospect>) {
+  return request("/prospects", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 export async function fetchRandomProspect(status = "scraped"): Promise<Prospect | { message: string }> {
-  return (await request(`/prospects/random?status=${status}`)).json();
+  try {
+    const res = await request(`/prospects/random?status=${status}`);
+    if (!res.ok) return { message: "Error al obtener prospecto" };
+    return await res.json();
+  } catch (err) {
+    return { message: "Error de conexión con el servidor" };
+  }
 }
 
 export async function automateProspect(name: string) {

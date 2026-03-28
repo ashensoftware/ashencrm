@@ -1,17 +1,26 @@
 import type { Prospect } from "../../types";
-import { getScreenshotUrl } from "../../api";
+import { getScreenshotUrl, updateProspect } from "../../api";
 import { mapStatusToLabel } from "../../utils";
-import { LABELS, WHATSAPP_TEMPLATES } from "../../constants";
-import { X, Check, CheckCircle, ChevronRight, ChevronLeft, MessageCircle, Sparkles, Info, ArrowRight, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { LABELS } from "../../constants";
+import { X, CheckCircle, ChevronRight, ChevronLeft, Sparkles, Edit2, Globe, Send, Coffee, Utensils, Activity, Scissors, Heart, Hammer, ShoppingBag, Wrench, Briefcase, Tag, MapPin } from "lucide-react";
+import { useState, useEffect } from "react";
 
-const PIPELINE_STEPS: Record<string, { nextStatus: string; label: string; color: string }> = {
-  ready:        { nextStatus: "prompt_gpt",    label: "Iniciar Prompt GPT",   color: "#58a6ff" },
-  prompt_gpt:   { nextStatus: "creating_demo", label: "Ya generé el prompt",  color: "#f59e0b" },
-  creating_demo:{ nextStatus: "demo_created",  label: "Ya creé la demo",      color: "#f97316" },
-  demo_created: { nextStatus: "contacted",     label: "Ya contacté al cliente", color: "#a78bfa" },
-  contacted:    { nextStatus: "client_won",    label: "Cliente obtenido",     color: "#2ea043" },
-};
+function getCategoryIcon(cat?: string) {
+  if (!cat) return <Tag size={14} />;
+  const c = cat.toLowerCase();
+  if (c.includes("cafe")) return <Coffee size={14} />;
+  if (c.includes("restaurante")) return <Utensils size={14} />;
+  if (c.includes("gimnasio") || c.includes("gym")) return <Activity size={14} />;
+  if (c.includes("barberia") || c.includes("peluqueria")) return <Scissors size={14} />;
+  if (c.includes("odontologia") || c.includes("medico") || c.includes("clinica")) return <Heart size={14} />;
+  if (c.includes("veterinaria") || c.includes("mascota") || c.includes("pet")) return <Heart size={14} />;
+  if (c.includes("ferreteria") || c.includes("construccion")) return <Hammer size={14} />;
+  if (c.includes("panaderia") || c.includes("reposteria") || c.includes("tienda") || c.includes("petshop")) return <ShoppingBag size={14} />;
+  if (c.includes("estetica") || c.includes("spa")) return <Sparkles size={14} />;
+  if (c.includes("taller") || c.includes("mecanica")) return <Wrench size={14} />;
+  if (c.includes("coworking") || c.includes("oficina")) return <Briefcase size={14} />;
+  return <Tag size={14} />;
+}
 
 interface Props {
   prospect: Prospect;
@@ -39,46 +48,85 @@ function InfoRow({ label, value, href }: { label: string; value?: string; href?:
 }
 
 export function ProspectDetailModal({ 
-  prospect, 
+  prospect: initialProspect, 
   onClose,
   onReject,
-  onAccept,
-  onContact,
-  onWhatsApp,
-  onGenerateDemo,
   onAdvanceStatus,
   onNext,
   onPrev,
   hasPrev,
   inline
 }: Props) {
+  const [prospect, setProspect] = useState<Prospect>(initialProspect);
   const screenshotUrl = getScreenshotUrl(prospect.screenshot_path);
   const website = prospect.website || prospect.ig_website;
   const phone = prospect.phone || prospect.ig_phone;
-  const pipelineStep = PIPELINE_STEPS[prospect.status || ""];
-  const [waMenuOpen, setWaMenuOpen] = useState(false);
+  
+  // Local UI States
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: prospect.name || "",
+    phone: phone || "",
+    website: website || "",
+    address: prospect.address || ""
+  });
 
-  const handleWhatsAppAction = (templateId?: string) => {
-    if (!templateId) {
-      if (onWhatsApp) onWhatsApp();
-      setWaMenuOpen(false);
-      return;
+  const [promptText, setPromptText] = useState(prospect.prompt_used || "");
+  const [demoUrl, setDemoUrl] = useState(prospect.demo_url || "");
+  const [demoAcc, setDemoAcc] = useState(prospect.lovable_account_used || "");
+  const [waMsg, setWaMsg] = useState(prospect.whatsapp_message || "");
+
+  const [loading, setLoading] = useState(false);
+
+  // Sync local state when parent passes a new prospect (e.g. arrow navigation)
+  useEffect(() => {
+    setProspect(initialProspect);
+    const newWebsite = initialProspect.website || initialProspect.ig_website || "";
+    const newPhone = initialProspect.phone || initialProspect.ig_phone || "";
+    setEditForm({
+      name: initialProspect.name || "",
+      phone: newPhone,
+      website: newWebsite,
+      address: initialProspect.address || "",
+    });
+    setPromptText(initialProspect.prompt_used || "");
+    setDemoUrl(initialProspect.demo_url || "");
+    setDemoAcc(initialProspect.lovable_account_used || "");
+    setWaMsg(initialProspect.whatsapp_message || "");
+    setIsEditing(false);
+  }, [initialProspect]);
+
+  // Computed
+  const status = prospect.status || "scraped";
+  const hasWebsite = Boolean(website);
+
+  const performUpdate = async (data: Partial<Prospect>) => {
+    setLoading(true);
+    try {
+      const res = await updateProspect(prospect.name, data as Record<string, string>);
+      if (res.ok) {
+        setProspect(prev => ({ ...prev, ...data }));
+        if (data.status && onAdvanceStatus) {
+            onAdvanceStatus(data.status); // informs parent to refresh
+        }
+      } else {
+        alert("Error al guardar en base de datos");
+      }
+    } catch(e) {
+      alert("Error de red");
+    } finally {
+      setLoading(false);
     }
-    
-    const template = WHATSAPP_TEMPLATES.find(t => t.id === templateId);
-    if (template) {
-      let msg = template.template;
-      msg = msg.replace(/{name}/g, prospect.name || "empresa");
-      msg = msg.replace(/{category}/g, prospect.category || "negocio");
-      msg = msg.replace(/{followers}/g, String(prospect.ig_followers || "0"));
-      
-      const phoneInfo = prospect.phone || prospect.ig_phone || "";
-      const cleanPhone = phoneInfo.replace(/\D/g, "");
-      
-      const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
-      window.open(url, "_blank");
-    }
-    setWaMenuOpen(false);
+  };
+
+  const handleEditSave = async () => {
+    await performUpdate({
+      name: editForm.name,
+      phone: editForm.phone,
+      website: editForm.website,
+      address: editForm.address
+    });
+    setIsEditing(false);
   };
 
   return (
@@ -90,230 +138,257 @@ export function ProspectDetailModal({
       {onPrev && (
         <button 
           className="modal-nav-arrow left" 
-          onClick={onPrev} 
-          disabled={!hasPrev}
+          onClick={(e) => { e.stopPropagation(); onPrev(); }} 
+          disabled={!hasPrev || loading}
           style={{ position: 'absolute', left: '2rem', border: 'none', background: 'transparent', color: hasPrev ? '#fff' : '#555', cursor: hasPrev ? 'pointer' : 'default', transition: 'transform 0.2s', transform: hasPrev ? 'scale(1)' : 'scale(0.9)', zIndex: 100 }}
         >
           <ChevronLeft size={64} />
         </button>
       )}
 
-      <div className="modal-content prospect-detail-modal" onClick={(e) => e.stopPropagation()}>
-        <header>
-          <h2>{LABELS.DETAIL_TITLE}</h2>
-          <button className="close-btn" onClick={onClose} aria-label="Cerrar">×</button>
+      <div className="modal-content prospect-detail-modal" onClick={(e) => e.stopPropagation()} style={{ overflowY: 'auto', maxHeight: '90vh' }}>
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <h2 style={{ margin: 0 }}>{LABELS.DETAIL_TITLE}</h2>
+            <span className="prospect-detail-badge" style={{ background: "var(--accent-muted)", color: "var(--accent)" }}>
+              {mapStatusToLabel(status)}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button className="btn-secondary" style={{ padding: '0.4rem 0.8rem', display: 'flex', gap: '0.4rem', fontSize: '0.85rem' }} onClick={() => setIsEditing(!isEditing)}>
+              <Edit2 size={16} /> {isEditing ? "Cancelar" : "Editar Datos"}
+            </button>
+            <button className="close-btn" onClick={onClose} aria-label="Cerrar" disabled={loading}>×</button>
+          </div>
         </header>
 
-        <div className="prospect-detail-grid">
-          <div>
-            {screenshotUrl ? (
-              <img src={screenshotUrl} alt="" className="prospect-detail-logo" />
-            ) : (
-              <div
-                className="prospect-detail-logo"
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.5rem" }}
-              >
-                {prospect.name.charAt(0).toUpperCase()}
+        {isEditing ? (
+          <div className="fade-in-scale" style={{ background: 'var(--bg-base)', padding: '1.5rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid var(--border)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <h4 style={{ marginTop: 0, marginBottom: '1.25rem', color: 'var(--text-primary)', fontSize: '1rem' }}>Editar Información Básica</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nombre del negocio</label>
+                <input type="text" className="dialog-input" value={editForm.name} onChange={e => setEditForm(f => ({...f, name: e.target.value}))} placeholder="Ej. Gran Restaurante" />
               </div>
-            )}
-          </div>
-          <div className="prospect-detail-main">
-            <h2>{prospect.name}</h2>
-            <p className="meta">{prospect.category || "—"} · {prospect.address || "—"}</p>
-            <span className="prospect-detail-badge" style={{ background: "var(--accent-muted)", color: "var(--accent)" }}>
-              {mapStatusToLabel(prospect.status)}
-            </span>
-            {prospect.lead_score != null && (
-              <div style={{ marginTop: '0.6rem', fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span className="prospect-detail-badge" style={{ background: "var(--success-muted)", color: "var(--success)" }}>
-                  Score: {prospect.lead_score}
-                </span>
-                <span title="Calidad del prospecto basada en seguidores, web, etc." style={{ cursor: 'help', color: 'var(--text-secondary)' }}>
-                  <Info size={14} />
-                </span>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Número de Teléfono</label>
+                <input type="text" className="dialog-input" value={editForm.phone} onChange={e => setEditForm(f => ({...f, phone: e.target.value}))} placeholder="Ej. 300 000 0000" />
               </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Enlace del Sitio Web</label>
+                <input type="text" className="dialog-input" value={editForm.website} onChange={e => setEditForm(f => ({...f, website: e.target.value}))} placeholder="https://..." />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Dirección Física</label>
+                <input type="text" className="dialog-input" value={editForm.address} onChange={e => setEditForm(f => ({...f, address: e.target.value}))} placeholder="Ej. Calle 1 # 2-3" />
+              </div>
+              <button className="btn-primary" onClick={handleEditSave} disabled={loading} style={{ marginTop: '0.5rem', padding: '0.8rem' }}>
+                {loading ? "Guardando..." : "Guardar Cambios"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="prospect-detail-grid">
+              <div>
+                {screenshotUrl ? (
+                  <img src={screenshotUrl} alt="" className="prospect-detail-logo" />
+                ) : (
+                  <div className="prospect-detail-logo" style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.5rem" }}>
+                    {prospect.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div className="prospect-detail-main">
+                <h2>{prospect.name}</h2>
+                <div className="meta" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.9rem', flexWrap: 'wrap' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
+                    {getCategoryIcon(prospect.category)} 
+                    <span style={{ textTransform: 'capitalize' }}>{prospect.category || "—"}</span>
+                  </span>
+                  <span>·</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                     <MapPin size={14} /> {prospect.address || "—"}
+                  </span>
+                </div>
+                {prospect.lead_score != null && (
+                  <div style={{ marginTop: '0.6rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Score: {prospect.lead_score}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="prospect-detail-section">
+              <InfoRow label={LABELS.PHONE} value={phone} />
+              <InfoRow label="Web" value={website} href={website} />
+              <InfoRow label="Instagram" value={prospect.instagram_handle || prospect.instagram_url} href={prospect.instagram_url} />
+              <InfoRow label="Google Maps" value={prospect.maps_url ? "Abrir en Maps" : ""} href={prospect.maps_url} />
+            </div>
+
+            {/* Render saved data implicitly */}
+            {prospect.prompt_used && (
+               <div className="prospect-detail-section" style={{ background: 'rgba(245, 158, 11, 0.05)', borderLeft: '3px solid #f59e0b' }}>
+                 <h4 style={{ color: '#f59e0b' }}>Prompt Utilizado</h4>
+                 <p style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem' }}>{prospect.prompt_used}</p>
+               </div>
             )}
-          </div>
-        </div>
-
-        <div className="prospect-detail-section">
-          <h4>{LABELS.CONTACT_SECTION}</h4>
-          <InfoRow label={LABELS.PHONE} value={phone} />
-          <InfoRow label="Web" value={website} href={website} />
-          <InfoRow label="Instagram" value={prospect.instagram_handle || prospect.instagram_url} href={prospect.instagram_url} />
-          <InfoRow label="Email" value={prospect.ig_email} />
-        </div>
-
-        {(prospect.ig_bio || prospect.ig_followers) && (
-          <div className="prospect-detail-section">
-            <h4>{LABELS.INSTAGRAM_SECTION}</h4>
-            {prospect.ig_followers ? <InfoRow label={LABELS.FOLLOWERS} value={String(prospect.ig_followers)} /> : null}
-            {prospect.ig_bio ? <p>{prospect.ig_bio}</p> : null}
-          </div>
+            {prospect.demo_url && (
+               <div className="prospect-detail-section" style={{ background: 'rgba(167, 139, 250, 0.05)', borderLeft: '3px solid #a78bfa' }}>
+                 <h4 style={{ color: '#a78bfa' }}>Demo Lovable</h4>
+                 <InfoRow label="URL" value="Ver Demo" href={prospect.demo_url} />
+                 <InfoRow label="Cuenta Usada" value={prospect.lovable_account_used} />
+               </div>
+            )}
+            {prospect.whatsapp_message && (
+               <div className="prospect-detail-section" style={{ background: 'rgba(46, 160, 67, 0.05)', borderLeft: '3px solid #2ea043' }}>
+                 <h4 style={{ color: '#2ea043' }}>Mensaje Enviado</h4>
+                 <p style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem' }}>{prospect.whatsapp_message}</p>
+               </div>
+            )}
+          </>
         )}
 
-        {(prospect.rating || prospect.reviews_count) ? (
-          <div className="prospect-detail-section">
-            <h4>{LABELS.MAPS_SECTION}</h4>
-            <InfoRow label={LABELS.RATING} value={prospect.rating ? `${prospect.rating} ⭐` : undefined} />
-            <InfoRow label={LABELS.REVIEWS} value={prospect.reviews_count ? String(prospect.reviews_count) : undefined} />
-            <InfoRow label={LABELS.MAP_VIEW} value={LABELS.MAP_OPEN} href={prospect.maps_url} />
-          </div>
-        ) : prospect.maps_url ? (
-          <div className="prospect-detail-section">
-            <InfoRow label={LABELS.MAPS_SECTION} value={LABELS.MAP_OPEN} href={prospect.maps_url} />
-          </div>
-        ) : null}
-
-        {prospect.demo_url && (
-          <div className="prospect-detail-section">
-            <h4>{LABELS.DEMO_SECTION}</h4>
-            <InfoRow label="URL" value={LABELS.DEMO_VIEW} href={prospect.demo_url} />
-          </div>
-        )}
-
-        {prospect.notes && (
-          <div className="prospect-detail-section">
-            <h4>{LABELS.NOTES_SECTION}</h4>
-            <p>{prospect.notes}</p>
-          </div>
-        )}
-
-        {/* PIPELINE PROGRESSION */}
-        {pipelineStep && onAdvanceStatus && (
-          <div style={{ marginTop: '1.25rem', borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem', fontWeight: 600 }}>Siguiente Paso</p>
-            <button
-              onClick={() => onAdvanceStatus(pipelineStep.nextStatus)}
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem',
-                background: `${pipelineStep.color}22`,
-                border: `1px solid ${pipelineStep.color}55`,
-                borderRadius: 'var(--radius-sm)',
-                color: pipelineStep.color,
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.5rem',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = `${pipelineStep.color}33`; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = `${pipelineStep.color}22`; e.currentTarget.style.transform = 'translateY(0)'; }}
-            >
-              <ArrowRight size={18} /> {pipelineStep.label}
-            </button>
-          </div>
-        )}
-
-        {/* CONTROLES DE ACCIÓN (TINDER / REVISIÓN) */}
-        <div className="prospect-detail-actions" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem', borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            <div style={{ position: 'relative' }}>
-              {onWhatsApp && (
-                <button 
-                  className="btn-whatsapp" 
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', width: '100%' }} 
-                  onClick={() => setWaMenuOpen(!waMenuOpen)}
-                >
-                  <MessageCircle size={18} /> WhatsApp <ChevronDown size={14} />
-                </button>
-              )}
-              {waMenuOpen && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  width: '100%',
-                  marginTop: '0.5rem',
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-                  zIndex: 200,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden'
-                }}>
-                  {WHATSAPP_TEMPLATES.map(t => (
-                    <button
-                      key={t.id}
-                      onClick={() => handleWhatsAppAction(t.id)}
-                      style={{
-                        padding: '0.75rem 1rem',
-                        background: 'transparent',
-                        border: 'none',
-                        borderBottom: '1px solid var(--border)',
-                        color: 'var(--text-primary)',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        fontSize: '0.85rem'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                    >
-                      {t.name}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => handleWhatsAppAction()}
-                    style={{
-                      padding: '0.75rem 1rem',
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--accent)',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '0.85rem',
-                      fontWeight: 600
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+        {/* GUIDED ASSISTANT LOGIC */}
+        {!isEditing && (
+          <div style={{ marginTop: '2rem', borderTop: '2px dashed var(--border)', paddingTop: '1.5rem' }}>
+            
+            {status === "scraped" && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <button 
+                    className="btn-danger" 
+                    onClick={() => onReject ? onReject() : performUpdate({ status: 'rejected' })} 
+                    style={{ padding: '1.5rem', fontSize: '1.25rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}
+                    disabled={loading}
                   >
-                    🚀 Enviar con Bot
+                    <X size={32} /> Rechazar
+                  </button>
+                  <button 
+                    className="btn-primary" 
+                    onClick={() => performUpdate({ status: 'waiting' })} 
+                    style={{ padding: '1.5rem', fontSize: '1.25rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', background: '#58a6ff' }}
+                    disabled={loading}
+                  >
+                    <CheckCircle size={32} /> Aceptar
                   </button>
                 </div>
-              )}
-            </div>
-            {onGenerateDemo && (
-               <button className="btn-primary-alt" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} onClick={onGenerateDemo}>
-                 <Sparkles size={18} /> Ingresar Link Demo
-               </button>
+                
+                {hasWebsite && (
+                  <button 
+                    className="btn-secondary" 
+                    onClick={() => performUpdate({ status: 'demo_created' })} // Skip to pre-contact
+                    style={{ width: '100%', padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                    disabled={loading}
+                  >
+                    <Globe size={20} /> Ya tiene Web ➔ Contactar Directo
+                  </button>
+                )}
+              </div>
             )}
-          </div>
 
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {onReject && (
-              <button className="btn-danger" onClick={onReject} title="Rechazar prospecto" style={{ padding: '0.6rem', flex: '0 0 auto' }}>
-                <X size={20} />
-              </button>
+            {status === "waiting" && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>1. Generar Prompt</h3>
+                <p style={{ color: 'var(--text-muted)' }}>Para crear la IA, necesitamos generar su contexto inicial.</p>
+                <textarea 
+                  className="dialog-input" 
+                  rows={5} 
+                  value={promptText} 
+                  onChange={e => setPromptText(e.target.value)} 
+                  placeholder="Pega aquí el prompt generado por GPT..."
+                />
+                <button 
+                  className="btn-primary" 
+                  style={{ background: '#f59e0b' }} 
+                  onClick={() => performUpdate({ status: 'prompt_gpt', prompt_used: promptText })}
+                  disabled={!promptText.trim() || loading}
+                >
+                  <Sparkles size={18} style={{ marginRight: '6px' }}/> Guardar Prompt y Continuar
+                </button>
+              </div>
             )}
-            {onContact && (
-              <button className="btn-primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} onClick={onContact}>
-                <Check size={18} /> Contactado
-              </button>
-            )}
-            {onAccept && (
-              <button className="btn-success" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} onClick={onAccept}>
-                <CheckCircle size={18} /> Aceptar / Guardar
-              </button>
-            )}
-          </div>
-        </div>
 
+            {status === "prompt_gpt" && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>2. Crear Demo de Lovable</h3>
+                <p style={{ color: 'var(--text-muted)' }}>Crea la demo y pega la URL y la cuenta de correo usada.</p>
+                <input 
+                  type="text" 
+                  className="dialog-input" 
+                  value={demoUrl} 
+                  onChange={e => setDemoUrl(e.target.value)} 
+                  placeholder="URL de la Demo (https://...)" 
+                />
+                <input 
+                  type="text" 
+                  className="dialog-input" 
+                  value={demoAcc} 
+                  onChange={e => setDemoAcc(e.target.value)} 
+                  placeholder="Correo / Cuenta usada en Lovable" 
+                />
+                <button 
+                  className="btn-primary" 
+                  style={{ background: '#a78bfa' }} 
+                  onClick={() => performUpdate({ status: 'demo_created', demo_url: demoUrl, lovable_account_used: demoAcc })}
+                  disabled={!demoUrl.trim() || !demoAcc.trim() || loading}
+                >
+                  <CheckCircle size={18} style={{ marginRight: '6px' }}/> Guardar Demo y Continuar
+                </button>
+              </div>
+            )}
+
+            {status === "demo_created" && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>3. Redactar Pitch de WhatsApp</h3>
+                <p style={{ color: 'var(--text-muted)' }}>Escribe o personaliza el mensaje antes de enviarlo por WhatsApp.</p>
+                <textarea 
+                  className="dialog-input" 
+                  rows={6} 
+                  value={waMsg} 
+                  onChange={e => setWaMsg(e.target.value)} 
+                  placeholder="¡Hola! Pasaba por..."
+                />
+                <button 
+                  className="btn-primary" 
+                  style={{ background: '#2ea043' }} 
+                  onClick={async () => {
+                    await performUpdate({ status: 'contacted', whatsapp_message: waMsg });
+                    // Open WA Window
+                    const targetPhone = phone ? phone.replace(/\D/g, "") : ""; 
+                    if(targetPhone) {
+                       window.open(`https://wa.me/${targetPhone}?text=${encodeURIComponent(waMsg)}`, "_blank");
+                    } else {
+                       alert("El prospecto no tiene número telefónico para abrir WhatsApp automáticamente.");
+                    }
+                  }}
+                  disabled={!waMsg.trim() || loading}
+                >
+                  <Send size={18} style={{ marginRight: '6px' }}/> Guardar y Enviar WhatsApp
+                </button>
+              </div>
+            )}
+
+            {status === "contacted" && (
+              <div style={{ textAlign: 'center', padding: '1rem' }}>
+                <CheckCircle size={48} color="#2ea043" style={{ marginBottom: '1rem' }} />
+                <h3>¡Prospecto Contactado!</h3>
+                <p style={{ color: 'var(--text-muted)' }}>Esperando respuesta del cliente.</p>
+              </div>
+            )}
+
+          </div>
+        )}
       </div>
 
       {onNext && (
         <button 
           className="modal-nav-arrow right" 
-          onClick={onNext}
+          onClick={(e) => { e.stopPropagation(); onNext(); }}
           style={{ position: 'absolute', right: '2rem', border: 'none', background: 'transparent', color: '#fff', cursor: 'pointer', transition: 'transform 0.2s', zIndex: 100 }}
           onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
           onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          disabled={loading}
         >
           <ChevronRight size={64} />
         </button>

@@ -1,0 +1,16 @@
+MUESTRA DE BASE DE DATOS:
+{'id': 2, 'name': 'CAF Elite', 'phone': '', 'website': '', 'maps_url': 'https://www.google.com/maps/place/CAF+Elite/data=!4m7!3m6!1s0x8e4429944a318da5:0xc2d13a38374f91d3!8m2!3d6.2201967!4d-75.6070163!16s%2Fg%2F11pd3f68hm!19sChIJpY0xSpQpRI4R05FPNzg60cI?authuser=0&hl=es-419&rclk=1'}
+{'id': 6, 'name': 'Medellín', 'phone': '301 4302726', 'website': '', 'maps_url': 'https://www.google.com/maps/place/Medell%C3%ADn/data=!4m7!3m6!1s0x8e4428dfb80fad05:0x42137cfcc7b53b56!8m2!3d6.2476376!4d-75.5658153!16zL20vMDF4XzZz!19sChIJBa0PuN8oRI4RVju1x_x8E0I?authuser=0&hl=es-419&rclk=1'}
+{'id': 7, 'name': 'Mirador el Cielo Medellin', 'phone': '', 'website': '', 'maps_url': 'https://www.google.com/maps/place/Mirador+el+Cielo+Medellin/data=!4m7!3m6!1s0x8e4683c062e4bb9f:0x162e98408f970e42!8m2!3d6.207669!4d-75.6089182!16s%2Fg%2F11f9ymk3jl!19sChIJn7vkYsCDRo4RQg6Xj0CYLhY?authuser=0&hl=es-419&rclk=1'}
+{'id': 8, 'name': 'VIAJES MAXITOURS', 'phone': '313 6110609', 'website': '', 'maps_url': 'https://www.google.com/maps/place/VIAJES+MAXITOURS/data=!4m7!3m6!1s0x8e4429732f478739:0x7903fbe8a03a08ad!8m2!3d6.250995!4d-75.588695!16s%2Fg%2F1ptw8ym51!19sChIJOYdHL3MpRI4RrQg6oOj7A3k?authuser=0&hl=es-419&rclk=1'}
+{'id': 9, 'name': 'Vibras Café', 'phone': '3044711994', 'website': '', 'maps_url': 'https://www.google.com/maps/place/Vibras+Caf%C3%A9/data=!4m7!3m6!1s0x8e4429d2a79f487d:0xcfa2ba78307ea2c!8m2!3d6.2352623!4d-75.6024491!16s%2Fg%2F11h5vk2ckt!19sChIJfUifp9IpRI4RLOoHg6cr-gw?authuser=0&hl=es-419&rclk=1'}
+{'id': 13, 'name': 'Centro de Negocios del Sur', 'phone': '', 'website': '', 'maps_url': 'https://www.google.com/maps/place/Centro+de+Negocios+del+Sur/data=!4m7!3m6!1s0x8e46827044c65291:0x581cae734dbd5007!8m2!3d6.1989499!4d-75.5884815!16s%2Fg%2F11c1rtnzb5!19sChIJkVLGRHCCRo4RB1C9TXOuHFg?authuser=0&hl=es-419&rclk=1'}
+{'id': 18, 'name': 'Franquicias Y Negocios', 'phone': '', 'website': '', 'maps_url': 'https://www.google.com/maps/place/Franquicias+Y+Negocios/data=!4m7!3m6!1s0x8e4429fe1dd1647b:0x8c4992e92a725be0!8m2!3d6.2413439!4d-75.5981434!16s%2Fg%2F11tf223x5z!19sChIJe2TRHf4pRI4R4FtyKumSSYw?authuser=0&hl=es-419&rclk=1'}
+{'id': 20, 'name': 'Edifio salud y servicio', 'phone': '', 'website': 'https://duckduckgo.com/', 'maps_url': 'https://www.google.com/maps/place/Edifio+salud+y+servicio/data=!4m7!3m6!1s0x8e4429003b5a1d3d:0x30690ade0d9af0fb!8m2!3d6.2233611!4d-75.5955855!16s%2Fg%2F11mkzwgcfp!19sChIJPR1aOwApRI4R-_CaDd4KaTA?authuser=0&hl=es-419&rclk=1'}
+{'id': 35, 'name': 'Plazoleta de Comidas Carulla Nutibara', 'phone': '', 'website': '', 'maps_url': 'https://www.google.com/maps/place/Plazoleta+de+Comidas+Carulla+Nutibara/data=!4m7!3m6!1s0x8e4429a19d66d129:0xaa92d0b126f7fb54!8m2!3d6.2444997!4d-75.5944172!16s%2Fg%2F1ptvw7pj1!19sChIJKdFmnaEpRI4RVPv3JrHQkqo?authuser=0&hl=es-419&rclk=1'}
+{'id': 47, 'name': 'Saludpan', 'phone': '', 'website': '', 'maps_url': 'https://www.google.com/maps/place/Saludpan/data=!4m7!3m6!1s0x8e4429a6ffe0ab21:0xa373bfec2dce8dbe!8m2!3d6.2465715!4d-75.5900982!16s%2Fg%2F11cm04xktk!19sChIJIavg_6YpRI4Rvo3OLey_c6M?authuser=0&hl=es-419&rclk=1'}
+
+Conteo por domain de website:
+{'website': '', 'c': 133}
+{'website': 'https://duckduckgo.com/', 'c': 51}
+{'website': 'https://duckduckgo.com/duckduckgo-help-pages/company/ads-by-microsoft-on-duckduckgo-private-search', 'c': 1}

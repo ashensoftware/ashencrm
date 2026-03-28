@@ -51,10 +51,58 @@ def create_prospects_router(db):
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    @router.get("/prospects/random")
-    async def get_random_prospect(status: str = "scraped"):
+    @router.post("/prospects")
+    async def create_manual_prospect(data: dict):
         try:
-            p = db.get_random_prospect(status)
+            name = data.get("name", "").strip()
+            category = data.get("category", "").strip()
+            
+            if not name or not category:
+                raise HTTPException(status_code=400, detail="Name and category are required")
+                
+            from backend.domain.prospect import Prospect
+            
+            p = Prospect(
+                name=name,
+                category=category,
+                address=data.get("address", ""),
+                city=data.get("city", ""),
+                phone=data.get("phone", ""),
+                website=data.get("website", ""),
+                rating=float(data.get("rating", 0.0)),
+                reviews_count=int(data.get("reviews_count", 0)),
+                maps_url=data.get("maps_url", ""),
+                latitude=float(data.get("latitude", 0.0)),
+                longitude=float(data.get("longitude", 0.0)),
+                instagram_url=data.get("instagram_url", ""),
+                instagram_handle=data.get("instagram_handle", ""),
+                ig_followers=int(data.get("ig_followers", 0)),
+                ig_bio=data.get("ig_bio", ""),
+                ig_email=data.get("ig_email", ""),
+                ig_phone=data.get("ig_phone", ""),
+                ig_website=data.get("ig_website", ""),
+                demo_url=data.get("demo_url", ""),
+                screenshot_path=data.get("screenshot_path", ""),
+                lovable_account_used=data.get("lovable_account_used", ""),
+                prompt_used=data.get("prompt_used", ""),
+                status=data.get("status", ProspectStatus.SCRAPED.value),
+                notes=data.get("notes", ""),
+            )
+            
+            success = db.insert_prospect(p)
+            if not success:
+                raise HTTPException(status_code=409, detail="El prospecto ya existe")
+                
+            return {"message": "Prospecto creado manualmente", "prospect": p.to_dict()}
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error creando prospecto: {str(e)}")
+
+    @router.get("/prospects/random")
+    async def get_random_prospect(status: str = "scraped", exclude: Optional[str] = None):
+        try:
+            p = db.get_random_prospect(status, exclude_name=exclude)
             if not p:
                 return {"message": "No hay más prospectos por revisar"}
             return p

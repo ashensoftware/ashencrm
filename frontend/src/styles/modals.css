@@ -9,7 +9,7 @@
 .category-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; max-height: 360px; overflow-y: auto; }
 .category-item { display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 1rem; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
-.prospect-detail-modal .modal-content { width: 640px; max-height: 90vh; overflow-y: auto; }
+.modal-content.prospect-detail-modal { width: 640px; max-height: 90vh; overflow-y: auto; }
 .prospect-detail-grid { display: grid; grid-template-columns: 140px 1fr; gap: 1.5rem; margin-bottom: 1.25rem; }
 .prospect-detail-logo { width: 120px; height: 120px; border-radius: var(--radius-md); object-fit: cover; background: var(--bg-base); border: 1px solid var(--border); }
 .prospect-detail-main h2 { font-size: 1.25rem; margin-bottom: 0.35rem; }
@@ -21,3 +21,13 @@
 .prospect-detail-section a:hover { text-decoration: underline; }
 .prospect-detail-row { display: flex; gap: 1rem; margin-bottom: 0.4rem; flex-wrap: wrap; }
 .prospect-detail-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
+
+.dialog-input { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border); color: var(--text-primary); padding: 0.85rem 1rem; border-radius: var(--radius-sm); outline: none; font-size: 0.95rem; width: 100%; transition: all 0.2s ease-in-out; box-sizing: border-box; }
+.dialog-input:focus { border-color: var(--accent); background: rgba(0, 0, 0, 0.3); box-shadow: 0 0 0 2px var(--accent-muted); }
+.dialog-input::placeholder { color: var(--text-muted); }
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.98) translateY(-4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.fade-in-scale { animation: fadeInScale 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }

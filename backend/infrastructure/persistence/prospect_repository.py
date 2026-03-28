@@ -71,6 +71,7 @@ class ProspectRepository:
                     screenshot_path TEXT DEFAULT '',
                     lovable_account_used TEXT DEFAULT '',
                     prompt_used TEXT DEFAULT '',
+                    whatsapp_message TEXT DEFAULT '',
                     status TEXT DEFAULT 'scraped',
                     scraped_at TEXT DEFAULT '',
                     contacted_at TEXT DEFAULT '',
@@ -108,6 +109,12 @@ class ProspectRepository:
             try:
                 conn.execute(
                     "ALTER TABLE prospects ADD COLUMN is_contacted INTEGER DEFAULT 0"
+                )
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute(
+                    "ALTER TABLE prospects ADD COLUMN whatsapp_message TEXT DEFAULT ''"
                 )
             except sqlite3.OperationalError:
                 pass
@@ -282,12 +289,16 @@ class ProspectRepository:
             conn.execute("DELETE FROM category_catalog WHERE name = ?", (name,))
             conn.commit()
 
-    def get_random_prospect(self, status: str = "scraped") -> Optional[Prospect]:
+    def get_random_prospect(self, status: str = "scraped", exclude_name: Optional[str] = None) -> Optional[Prospect]:
         with self._conn() as conn:
-            row = conn.execute(
-                "SELECT * FROM prospects WHERE status = ? ORDER BY RANDOM() LIMIT 1",
-                (status,),
-            ).fetchone()
+            query = "SELECT * FROM prospects WHERE status = ?"
+            params = [status]
+            if exclude_name:
+                query += " AND name != ?"
+                params.append(exclude_name)
+            query += " ORDER BY RANDOM() LIMIT 1"
+            
+            row = conn.execute(query, params).fetchone()
             return Prospect.from_dict(dict(row)) if row else None
 
     def compute_lead_score(self, p: Prospect) -> int:

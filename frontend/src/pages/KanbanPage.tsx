@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import type { Prospect } from "../types";
-import { Eye, Phone, Globe, MessageCircle, Building2 } from "lucide-react";
+import { Eye, Phone, Globe, MessageCircle, Building2, X } from "lucide-react";
 
 interface Props {
   prospects: Prospect[];
@@ -60,6 +60,8 @@ function ProspectCard({ prospect, onSelect, onWhatsApp, onDragStart }: {
 
 export function KanbanPage({ prospects, onSelectProspect, onWhatsApp, onChangeStatus }: Props) {
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+  const [showRejectedModal, setShowRejectedModal] = useState(false);
+  const rejectedProspects = prospects.filter((p) => p.status === "rejected");
 
   const handleDragStart = useCallback((e: React.DragEvent, prospectName: string) => {
     e.dataTransfer.setData("text/plain", prospectName);
@@ -76,8 +78,15 @@ export function KanbanPage({ prospects, onSelectProspect, onWhatsApp, onChangeSt
   return (
     <div className="todo-view">
       <header className="todo-header">
-        <h2>Pipeline de Prospectos</h2>
-        <p>Seguimiento de leads en progreso — arrastra tarjetas entre columnas</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+          <div>
+            <h2>Pipeline de Prospectos</h2>
+            <p>Seguimiento de leads en progreso — arrastra tarjetas entre columnas</p>
+          </div>
+          <button className="btn-secondary" onClick={() => setShowRejectedModal(true)}>
+            Ver rechazados ({rejectedProspects.length})
+          </button>
+        </div>
       </header>
       <div className="todo-columns">
         {COLUMNS.map((col) => {
@@ -111,6 +120,44 @@ export function KanbanPage({ prospects, onSelectProspect, onWhatsApp, onChangeSt
           );
         })}
       </div>
+
+      {showRejectedModal && (
+        <div className="modal" onClick={(e) => e.target === e.currentTarget && setShowRejectedModal(false)}>
+          <div className="modal-content" style={{ width: "760px", maxHeight: "88vh" }}>
+            <header>
+              <h2>Prospectos rechazados</h2>
+              <button className="close-btn" onClick={() => setShowRejectedModal(false)} aria-label="Cerrar">×</button>
+            </header>
+            {rejectedProspects.length === 0 ? (
+              <div className="empty-state" style={{ padding: "1rem 0 0.25rem" }}>
+                No hay prospectos rechazados por ahora.
+              </div>
+            ) : (
+              <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.6rem", paddingRight: "0.25rem" }}>
+                {rejectedProspects.map((p) => (
+                  <div key={p.name} className="todo-card" style={{ cursor: "default" }}>
+                    <div className="todo-card-header">
+                      <div className="todo-card-avatar">
+                        <X size={16} />
+                      </div>
+                      <span className="todo-card-title">{p.name}</span>
+                      {p.lead_score != null && <span className="todo-card-score">{p.lead_score}</span>}
+                    </div>
+                    <div className="todo-card-meta">
+                      {p.category && <span className="todo-card-category">{p.category}</span>}
+                    </div>
+                    <div className="todo-card-actions">
+                      <button className="todo-action-btn" onClick={() => onSelectProspect(p)} title="Ver detalle">
+                        <Eye size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

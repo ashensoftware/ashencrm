@@ -415,10 +415,30 @@ export function ProspectDetailModal({
             )}
 
             {status === "contacted" && (
-              <div style={{ textAlign: 'center', padding: '1rem' }}>
-                <CheckCircle size={48} color="#2ea043" style={{ marginBottom: '1rem' }} />
-                <h3>¡Prospecto Contactado!</h3>
-                <p style={{ color: 'var(--text-muted)' }}>Esperando respuesta del cliente.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', textAlign: 'center', padding: '1rem' }}>
+                <div>
+                  <CheckCircle size={48} color="#2ea043" style={{ marginBottom: '1rem' }} />
+                  <h3>¡Prospecto Contactado!</h3>
+                  <p style={{ color: 'var(--text-muted)' }}>Marca el resultado de la propuesta cuando el cliente responda.</p>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <button
+                    className="btn-danger"
+                    onClick={() => performUpdate({ status: 'rejected' })}
+                    style={{ padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                    disabled={loading}
+                  >
+                    <X size={18} /> No aceptó propuesta
+                  </button>
+                  <button
+                    className="btn-primary"
+                    onClick={() => performUpdate({ status: 'client_won' })}
+                    style={{ padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                    disabled={loading}
+                  >
+                    <CheckCircle size={18} /> Sí aceptó propuesta
+                  </button>
+                </div>
               </div>
             )}
 
@@ -427,6 +447,14 @@ export function ProspectDetailModal({
                 <Globe size={48} color="#58a6ff" style={{ marginBottom: '1rem' }} />
                 <h3>En Lista de Espera (Con Web)</h3>
                 <p style={{ color: 'var(--text-muted)' }}>Este prospecto ya tiene página web. Quedará en esta lista para abordarlo en un momento distinto.</p>
+              </div>
+            )}
+
+            {status === "rejected" && (
+              <div style={{ textAlign: 'center', padding: '1rem' }}>
+                <X size={48} color="#64748b" style={{ marginBottom: '1rem' }} />
+                <h3>Prospecto Rechazado</h3>
+                <p style={{ color: 'var(--text-muted)' }}>El negocio no aceptó la propuesta en este momento.</p>
               </div>
             )}
 

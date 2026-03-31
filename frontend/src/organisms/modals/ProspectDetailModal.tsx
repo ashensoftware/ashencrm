@@ -1,8 +1,8 @@
 import type { Prospect } from "../../types";
-import { getScreenshotUrl, updateProspect } from "../../api";
+import { fetchAdminSettings, getScreenshotUrl, updateProspect } from "../../api";
 import { mapStatusToLabel } from "../../utils";
 import { LABELS } from "../../constants";
-import { X, CheckCircle, ChevronRight, ChevronLeft, Sparkles, Edit2, Globe, Send, Coffee, Utensils, Activity, Scissors, Heart, Hammer, ShoppingBag, Wrench, Briefcase, Tag, MapPin } from "lucide-react";
+import { X, CheckCircle, ChevronRight, ChevronLeft, Sparkles, Edit2, Globe, Send, Coffee, Utensils, Activity, Scissors, Heart, Hammer, ShoppingBag, Wrench, Briefcase, Tag, MapPin, Info, Clipboard, ClipboardCheck } from "lucide-react";
 import { useState, useEffect } from "react";
 
 function getCategoryIcon(cat?: string) {
@@ -20,6 +20,30 @@ function getCategoryIcon(cat?: string) {
   if (c.includes("taller") || c.includes("mecanica")) return <Wrench size={14} />;
   if (c.includes("coworking") || c.includes("oficina")) return <Briefcase size={14} />;
   return <Tag size={14} />;
+}
+
+function renderTemplateWithProspect(template: string, p: Prospect): string {
+  const firstName = (p.name || "").trim().split(/\s+/)[0] || "";
+  const data: Record<string, string> = {
+    name: p.name || "",
+    first_name: firstName,
+    category: p.category || "",
+    city: p.city || "",
+    address: p.address || "",
+    phone: (p.phone || p.ig_phone || ""),
+    followers: String(p.ig_followers || 0),
+    instagram: p.instagram_url || "",
+    instagram_handle: p.instagram_handle || "",
+    demo_url: p.demo_url || "",
+    website: p.website || p.ig_website || "",
+    rating: String(p.rating || 0),
+    reviews_count: String(p.reviews_count || 0),
+    email: p.ig_email || "",
+    bio: p.ig_bio || "",
+    notes: p.notes || "",
+    maps_url: p.maps_url || "",
+  };
+  return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_m, key: string) => data[key] ?? "");
 }
 
 interface Props {
@@ -51,6 +75,7 @@ export function ProspectDetailModal({
   prospect: initialProspect, 
   onClose,
   onReject,
+  onAccept,
   onAdvanceStatus,
   onNext,
   onPrev,
@@ -79,11 +104,36 @@ export function ProspectDetailModal({
   });
 
   const [promptText, setPromptText] = useState(prospect.prompt_used || "");
+  const [lovablePromptText, setLovablePromptText] = useState(prospect.lovable_prompt || "");
+  const [isEditingPromptGpt, setIsEditingPromptGpt] = useState(false);
+  const [isEditingPromptLovable, setIsEditingPromptLovable] = useState(false);
   const [demoUrl, setDemoUrl] = useState(prospect.demo_url || "");
+  const [demoRating, setDemoRating] = useState(
+    prospect.demo_rating != null ? String(prospect.demo_rating) : ""
+  );
   const [demoAcc, setDemoAcc] = useState(prospect.lovable_account_used || "");
   const [waMsg, setWaMsg] = useState(prospect.whatsapp_message || "");
 
   const [loading, setLoading] = useState(false);
+  const [loadingGptTemplate, setLoadingGptTemplate] = useState(false);
+  const [loadingWaTemplate, setLoadingWaTemplate] = useState(false);
+  const [copiedPromptGpt, setCopiedPromptGpt] = useState(false);
+  const [copiedPromptLovable, setCopiedPromptLovable] = useState(false);
+  const [isEditingDemoRating, setIsEditingDemoRating] = useState(false);
+
+  const copyToClipboard = async (text: string, kind: "gpt" | "lovable") => {
+    if (!text.trim()) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      if (kind === "gpt") {
+        setCopiedPromptGpt(true);
+        setTimeout(() => setCopiedPromptGpt(false), 1800);
+      } else {
+        setCopiedPromptLovable(true);
+        setTimeout(() => setCopiedPromptLovable(false), 1800);
+      }
+    } catch {}
+  };
 
   // Sync local state when parent passes a new prospect (e.g. arrow navigation)
   useEffect(() => {
@@ -101,20 +151,36 @@ export function ProspectDetailModal({
       maps_url: initialProspect.maps_url || "",
     });
     setPromptText(initialProspect.prompt_used || "");
+    setLovablePromptText(initialProspect.lovable_prompt || "");
     setDemoUrl(initialProspect.demo_url || "");
+    setDemoRating(
+      initialProspect.demo_rating != null ? String(initialProspect.demo_rating) : ""
+    );
     setDemoAcc(initialProspect.lovable_account_used || "");
     setWaMsg(initialProspect.whatsapp_message || "");
     setIsEditing(false);
+    setIsEditingPromptGpt(false);
+    setIsEditingPromptLovable(false);
+    setIsEditingDemoRating(false);
   }, [initialProspect]);
 
   // Computed
   const status = prospect.status || "scraped";
   const hasWebsite = Boolean(website);
+  const hasGptPrompt = Boolean((prospect.prompt_used || promptText || "").trim());
+  const showPromptGptCard =
+    hasGptPrompt &&
+    status !== "scraped" &&
+    status !== "ready" &&
+    status !== "waiting";
 
   const performUpdate = async (data: Partial<Prospect>) => {
     setLoading(true);
     try {
-      const res = await updateProspect(prospect.name, data as Record<string, string>);
+      const res = await updateProspect(
+        prospect.name,
+        data as Record<string, string | number | boolean | null>
+      );
       if (res.ok) {
         setProspect(prev => ({ ...prev, ...data }));
         if (data.status && onAdvanceStatus) {
@@ -272,21 +338,199 @@ export function ProspectDetailModal({
             </div>
 
             {/* Render saved data implicitly */}
-            {prospect.prompt_used && (
-               <div className="prospect-detail-section" style={{ background: 'rgba(245, 158, 11, 0.05)', borderLeft: '3px solid #f59e0b' }}>
-                 <h4 style={{ color: '#f59e0b' }}>Prompt Utilizado</h4>
-                 <p style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem' }}>{prospect.prompt_used}</p>
-               </div>
+            {showPromptGptCard && (
+              <div className="prospect-detail-section" style={{ background: 'rgba(245, 158, 11, 0.05)', borderLeft: '3px solid #f59e0b', padding: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <h4 style={{ color: '#f59e0b', margin: 0, display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                    Prompt GPT
+                    <span title="Prompt para ChatGPT (estrategia y copy base)" style={{ display: "inline-flex", cursor: "help" }}>
+                      <Info size={14} />
+                    </span>
+                  </h4>
+                  <div style={{ display: "flex", gap: "0.35rem" }}>
+                    <button
+                      className="btn-secondary"
+                      style={{
+                        padding: '0.3rem 0.5rem',
+                        fontSize: '0.78rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        background: copiedPromptGpt ? '#2ea043' : undefined,
+                        borderColor: copiedPromptGpt ? '#2ea043' : undefined,
+                        color: copiedPromptGpt ? '#fff' : undefined
+                      }}
+                      onClick={() => copyToClipboard(promptText, "gpt")}
+                      disabled={loading || !promptText.trim()}
+                      title="Copiar Prompt GPT"
+                    >
+                      {copiedPromptGpt ? <ClipboardCheck size={14} /> : <Clipboard size={14} />}
+                      {copiedPromptGpt ? "Copiado" : "Copiar"}
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      style={{ padding: '0.3rem 0.5rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                      onClick={() => setIsEditingPromptGpt(v => !v)}
+                      disabled={loading}
+                    >
+                      <Edit2 size={14} />
+                      {isEditingPromptGpt ? "Bloquear" : "Editar"}
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  className="dialog-input"
+                  rows={4}
+                  value={promptText}
+                  onChange={e => setPromptText(e.target.value)}
+                  placeholder="Escribe o edita aquí el prompt GPT..."
+                  readOnly={!isEditingPromptGpt}
+                  style={!isEditingPromptGpt ? { opacity: 0.9, cursor: 'default' } : undefined}
+                />
+                {isEditingPromptGpt && promptText !== (prospect.prompt_used || "") && (
+                  <button
+                    className="btn-secondary"
+                    style={{ marginTop: '0.65rem' }}
+                    onClick={async () => {
+                      await performUpdate({ prompt_used: promptText });
+                      setIsEditingPromptGpt(false);
+                    }}
+                    disabled={loading}
+                  >
+                    Guardar Prompt GPT
+                  </button>
+                )}
+              </div>
+            )}
+            {Boolean(prospect.lovable_prompt?.trim()) && (
+              <div className="prospect-detail-section" style={{ background: 'rgba(167, 139, 250, 0.08)', borderLeft: '3px solid #a78bfa', padding: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <h4 style={{ color: '#a78bfa', margin: 0, display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                    Prompt Lovable
+                    <span title="Prompt final que pegas directamente en Lovable" style={{ display: "inline-flex", cursor: "help" }}>
+                      <Info size={14} />
+                    </span>
+                  </h4>
+                  <div style={{ display: "flex", gap: "0.35rem" }}>
+                    <button
+                      className="btn-secondary"
+                      style={{
+                        padding: '0.3rem 0.5rem',
+                        fontSize: '0.78rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        background: copiedPromptLovable ? '#2ea043' : undefined,
+                        borderColor: copiedPromptLovable ? '#2ea043' : undefined,
+                        color: copiedPromptLovable ? '#fff' : undefined
+                      }}
+                      onClick={() => copyToClipboard(lovablePromptText, "lovable")}
+                      disabled={loading || !lovablePromptText.trim()}
+                      title="Copiar Prompt Lovable"
+                    >
+                      {copiedPromptLovable ? <ClipboardCheck size={14} /> : <Clipboard size={14} />}
+                      {copiedPromptLovable ? "Copiado" : "Copiar"}
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      style={{ padding: '0.3rem 0.5rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                      onClick={() => setIsEditingPromptLovable(v => !v)}
+                      disabled={loading}
+                    >
+                      <Edit2 size={14} />
+                      {isEditingPromptLovable ? "Bloquear" : "Editar"}
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  className="dialog-input"
+                  rows={4}
+                  value={lovablePromptText}
+                  onChange={e => setLovablePromptText(e.target.value)}
+                  placeholder="Escribe o edita aquí el prompt para Lovable..."
+                  readOnly={!isEditingPromptLovable}
+                  style={!isEditingPromptLovable ? { opacity: 0.9, cursor: 'default' } : undefined}
+                />
+                {isEditingPromptLovable && lovablePromptText !== (prospect.lovable_prompt || "") && (
+                  <button
+                    className="btn-secondary"
+                    style={{ marginTop: '0.65rem' }}
+                    onClick={async () => {
+                      await performUpdate({ lovable_prompt: lovablePromptText });
+                      setIsEditingPromptLovable(false);
+                    }}
+                    disabled={loading}
+                  >
+                    Guardar Prompt Lovable
+                  </button>
+                )}
+              </div>
             )}
             {prospect.demo_url && (
-               <div className="prospect-detail-section" style={{ background: 'rgba(167, 139, 250, 0.05)', borderLeft: '3px solid #a78bfa' }}>
-                 <h4 style={{ color: '#a78bfa' }}>Demo Lovable</h4>
+               <div className="prospect-detail-section" style={{ background: 'rgba(167, 139, 250, 0.05)', borderLeft: '3px solid #a78bfa', padding: '0.75rem' }}>
+                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                   <h4 style={{ color: '#a78bfa', margin: 0 }}>Demo Lovable</h4>
+                   <button
+                     className="btn-secondary"
+                     style={{ padding: '0.3rem 0.5rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                     onClick={() => setIsEditingDemoRating(v => !v)}
+                     disabled={loading}
+                   >
+                     <Edit2 size={14} />
+                     {isEditingDemoRating ? "Bloquear" : "Editar rating"}
+                   </button>
+                 </div>
                  <InfoRow label="URL" value="Ver Demo" href={prospect.demo_url} />
                  <InfoRow label="Cuenta Usada" value={prospect.lovable_account_used} />
+                 <InfoRow label="Rating" value={prospect.demo_rating != null ? `${prospect.demo_rating}/10` : "—"} />
+                 {isEditingDemoRating && (
+                   <div style={{ marginTop: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 10, padding: '0.5rem 0.6rem' }}>
+                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => {
+                       const currentStars = Math.round(Number(demoRating || 0));
+                       const active = star <= currentStars;
+                       return (
+                         <button
+                           key={star}
+                           type="button"
+                           onClick={() => setDemoRating(String(star))}
+                           className={active ? "btn-primary" : "btn-secondary"}
+                           style={{
+                             padding: '0.3rem 0.4rem',
+                             minWidth: 30,
+                             minHeight: 30,
+                             borderRadius: 8,
+                             fontWeight: 700,
+                             background: active ? '#a78bfa' : 'rgba(255,255,255,0.05)',
+                             borderColor: active ? '#a78bfa' : 'var(--border)',
+                             color: active ? '#fff' : 'var(--text-muted)'
+                           }}
+                         >
+                           ★
+                         </button>
+                       );
+                     })}
+                     <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginLeft: '0.35rem' }}>
+                       {Number(demoRating || 0)}/10
+                     </span>
+                     {Number(demoRating || 0) !== Number(prospect.demo_rating || 0) && (
+                       <button
+                         className="btn-secondary"
+                         style={{ marginLeft: '0.5rem', padding: '0.3rem 0.55rem', fontSize: '0.78rem' }}
+                         onClick={async () => {
+                           await performUpdate({ demo_rating: Number(demoRating || 0) });
+                           setIsEditingDemoRating(false);
+                         }}
+                         disabled={loading}
+                       >
+                         Guardar rating
+                       </button>
+                     )}
+                   </div>
+                 )}
                </div>
             )}
             {prospect.whatsapp_message && (
-               <div className="prospect-detail-section" style={{ background: 'rgba(46, 160, 67, 0.05)', borderLeft: '3px solid #2ea043' }}>
+               <div className="prospect-detail-section" style={{ background: 'rgba(46, 160, 67, 0.05)', borderLeft: '3px solid #2ea043', padding: '0.75rem' }}>
                  <h4 style={{ color: '#2ea043' }}>Mensaje Enviado</h4>
                  <p style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem' }}>{prospect.whatsapp_message}</p>
                </div>
@@ -311,7 +555,7 @@ export function ProspectDetailModal({
                   </button>
                   <button 
                     className="btn-primary" 
-                    onClick={() => performUpdate({ status: 'waiting' })} 
+                    onClick={() => (inline && onAccept) ? onAccept() : performUpdate({ status: 'ready' })} 
                     style={{ padding: '1.5rem', fontSize: '1.25rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', background: '#58a6ff' }}
                     disabled={loading}
                   >
@@ -332,10 +576,40 @@ export function ProspectDetailModal({
               </div>
             )}
 
-            {status === "waiting" && (
+            {(status === "ready" || status === "waiting") && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>1. Generar Prompt</h3>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  1. Generar Prompt
+                  <span title="Este prompt se usa en GPT para obtener el texto base y luego construir el prompt de Lovable." style={{ display: "inline-flex", cursor: "help" }}>
+                    <Info size={15} />
+                  </span>
+                </h3>
                 <p style={{ color: 'var(--text-muted)' }}>Para crear la IA, necesitamos generar su contexto inicial.</p>
+                <button
+                  className="btn-secondary"
+                  onClick={async () => {
+                    setLoadingGptTemplate(true);
+                    try {
+                      const settings = await fetchAdminSettings();
+                      const gptTemplate =
+                        settings.whatsapp_templates.find(t => t.id === "gpt_hero")?.template ||
+                        settings.whatsapp_templates.find(t => t.kind === "gpt")?.template;
+                      if (!gptTemplate) {
+                        alert("No hay plantilla GPT configurada en Admin > Plantillas.");
+                        return;
+                      }
+                      setPromptText(renderTemplateWithProspect(gptTemplate, prospect));
+                    } catch {
+                      alert("No se pudo cargar la plantilla GPT.");
+                    } finally {
+                      setLoadingGptTemplate(false);
+                    }
+                  }}
+                  disabled={loading || loadingGptTemplate}
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  {loadingGptTemplate ? "Cargando plantilla..." : "Usar plantilla GPT automática"}
+                </button>
                 <textarea 
                   className="dialog-input" 
                   rows={5} 
@@ -356,8 +630,52 @@ export function ProspectDetailModal({
 
             {status === "prompt_gpt" && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>2. Crear Demo de Lovable</h3>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  2. Crear Demo de Lovable
+                  <span title="Aquí guardas el prompt final para Lovable y los datos de la demo creada." style={{ display: "inline-flex", cursor: "help" }}>
+                    <Info size={15} />
+                  </span>
+                </h3>
                 <p style={{ color: 'var(--text-muted)' }}>Crea la demo y pega la URL y la cuenta de correo usada.</p>
+                <textarea
+                  className="dialog-input"
+                  rows={4}
+                  value={lovablePromptText}
+                  onChange={e => setLovablePromptText(e.target.value)}
+                  placeholder="Prompt final para Lovable..."
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                  <label style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Califica la demo (estrellas)</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 10, padding: '0.5rem 0.6rem' }}>
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => {
+                      const currentStars = Math.round(Number(demoRating || 0));
+                      const active = star <= currentStars;
+                      return (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setDemoRating(String(star))}
+                          className={active ? "btn-primary" : "btn-secondary"}
+                          style={{
+                            padding: '0.3rem 0.4rem',
+                            minWidth: 30,
+                            minHeight: 30,
+                            borderRadius: 8,
+                            fontWeight: 700,
+                            background: active ? '#a78bfa' : 'rgba(255,255,255,0.05)',
+                            borderColor: active ? '#a78bfa' : 'var(--border)',
+                            color: active ? '#fff' : 'var(--text-muted)'
+                          }}
+                        >
+                          ★
+                        </button>
+                      );
+                    })}
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginLeft: '0.35rem' }}>
+                      {Number(demoRating || 0)}/10
+                    </span>
+                  </div>
+                </div>
                 <input 
                   type="text" 
                   className="dialog-input" 
@@ -375,8 +693,8 @@ export function ProspectDetailModal({
                 <button 
                   className="btn-primary" 
                   style={{ background: '#a78bfa' }} 
-                  onClick={() => performUpdate({ status: 'demo_created', demo_url: demoUrl, lovable_account_used: demoAcc })}
-                  disabled={!demoUrl.trim() || !demoAcc.trim() || loading}
+                  onClick={() => performUpdate({ status: 'demo_created', demo_url: demoUrl, lovable_account_used: demoAcc, lovable_prompt: lovablePromptText, demo_rating: Number(demoRating || 0) })}
+                  disabled={!demoUrl.trim() || !demoAcc.trim() || !lovablePromptText.trim() || Number(demoRating || 0) <= 0 || loading}
                 >
                   <CheckCircle size={18} style={{ marginRight: '6px' }}/> Guardar Demo y Continuar
                 </button>
@@ -387,6 +705,31 @@ export function ProspectDetailModal({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>3. Redactar Pitch de WhatsApp</h3>
                 <p style={{ color: 'var(--text-muted)' }}>Escribe o personaliza el mensaje antes de enviarlo por WhatsApp.</p>
+                <button
+                  className="btn-secondary"
+                  onClick={async () => {
+                    setLoadingWaTemplate(true);
+                    try {
+                      const settings = await fetchAdminSettings();
+                      const waTemplate =
+                        settings.whatsapp_templates.find(t => t.id === "first_contact")?.template ||
+                        settings.whatsapp_templates.find(t => t.kind === "whatsapp")?.template;
+                      if (!waTemplate) {
+                        alert("No hay plantilla de WhatsApp configurada en Admin > Plantillas.");
+                        return;
+                      }
+                      setWaMsg(renderTemplateWithProspect(waTemplate, prospect));
+                    } catch {
+                      alert("No se pudo cargar la plantilla de WhatsApp.");
+                    } finally {
+                      setLoadingWaTemplate(false);
+                    }
+                  }}
+                  disabled={loading || loadingWaTemplate}
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  {loadingWaTemplate ? "Cargando plantilla..." : "Autocompletar plantilla"}
+                </button>
                 <textarea 
                   className="dialog-input" 
                   rows={6} 

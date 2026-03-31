@@ -82,9 +82,11 @@ def create_prospects_router(db):
                 ig_phone=data.get("ig_phone", ""),
                 ig_website=data.get("ig_website", ""),
                 demo_url=data.get("demo_url", ""),
+                demo_rating=float(data.get("demo_rating") or 0.0),
                 screenshot_path=data.get("screenshot_path", ""),
                 lovable_account_used=data.get("lovable_account_used", ""),
                 prompt_used=data.get("prompt_used", ""),
+                lovable_prompt=data.get("lovable_prompt", ""),
                 status=data.get("status", ProspectStatus.SCRAPED.value),
                 notes=data.get("notes", ""),
             )
@@ -158,8 +160,19 @@ def create_prospects_router(db):
             if not p:
                 raise HTTPException(status_code=404, detail="Prospecto no encontrado")
 
+            if "demo_rating" in data:
+                try:
+                    rating = float(data["demo_rating"])
+                except (TypeError, ValueError):
+                    raise HTTPException(status_code=400, detail="demo_rating debe ser numérico")
+                if rating < 0 or rating > 10:
+                    raise HTTPException(status_code=400, detail="demo_rating debe estar entre 0 y 10")
+                data["demo_rating"] = rating
+
             db.patch_prospect(p.name, p.address, data)
             return {"message": "Prospecto actualizado"}
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

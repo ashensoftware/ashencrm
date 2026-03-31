@@ -20,8 +20,10 @@ export interface Prospect {
   ig_phone?: string;
   ig_website?: string;
   demo_url?: string;
+  demo_rating?: number;
   screenshot_path?: string;
   prompt_used?: string;
+  lovable_prompt?: string;
   lovable_account_used?: string;
   whatsapp_message?: string;
   status?: string;
@@ -52,6 +54,8 @@ export interface WhatsappTemplate {
   id: string;
   name: string;
   template: string;
+  kind?: "whatsapp" | "gpt" | "lovable" | string;
+  audience?: "cliente" | "equipo_interno" | "ia" | string;
 }
 
 export interface ClientPreferences {

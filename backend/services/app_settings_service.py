@@ -36,8 +36,41 @@ _DEFAULT_CLIENT_PREFERENCES: dict[str, Any] = {
 
 _DEFAULT_TEMPLATES: list[dict[str, str]] = [
     {
+        "id": "gpt_hero",
+        "name": "GPT Hero inicial",
+        "kind": "gpt",
+        "audience": "ia",
+        "template": (
+            "Actúa como Ashen Software, una empresa de desarrollo web enfocada en crear landing pages visuales para negocios locales.\n\n"
+            "Necesito generar ÚNICAMENTE la primera sección (hero / vista inicial) para:\n"
+            "- Negocio: {name}\n"
+            "- Categoría: {category}\n"
+            "- Dirección: {address}\n"
+            "- Instagram: {instagram}\n"
+            "- Google Maps: {maps_url}\n\n"
+            "IMPORTANTE:\n"
+            "- SOLO generar la landing inicial (hero).\n"
+            "- NO crear más secciones.\n"
+            "- NO agregar funcionalidades adicionales.\n"
+            "- Debe ser ideal para screenshot visual.\n\n"
+            "La hero debe incluir:\n"
+            "1) Fondo visual impactante acorde al negocio.\n"
+            "2) Título principal claro con el nombre del negocio.\n"
+            "3) Subtítulo corto orientado a propuesta de valor.\n"
+            "4) 2 botones visibles (solo visuales): 'Pedir por WhatsApp' y 'Ver Menú/Servicios'.\n"
+            "5) Estilo moderno, limpio, profesional, con jerarquía tipográfica clara.\n"
+            "6) Línea breve inferior con ubicación y horario.\n\n"
+            "Entrega:\n"
+            "1) Copy final del hero (H1, subtítulo, línea inferior, CTA1, CTA2)\n"
+            "2) Dirección visual (paleta, tipografía, estilo fondo/botones)\n"
+            "3) Prompt final para Lovable (bloque único listo para copiar)."
+        ),
+    },
+    {
         "id": "first_contact",
         "name": "Primer contacto (envío con demo)",
+        "kind": "whatsapp",
+        "audience": "cliente",
         "template": (
             "Hola {first_name}, vimos *{name}* en {city} ({category}). "
             "Tienen ~{followers} seguidores en IG {instagram_handle}. "
@@ -48,6 +81,8 @@ _DEFAULT_TEMPLATES: list[dict[str, str]] = [
     {
         "id": "demo_followup",
         "name": "Seguimiento demo",
+        "kind": "whatsapp",
+        "audience": "cliente",
         "template": (
             "Hola equipo de {name}, ¿qué tal? "
             "¿Pudieron ver la demo? {demo_url}\n"
@@ -57,6 +92,8 @@ _DEFAULT_TEMPLATES: list[dict[str, str]] = [
     {
         "id": "direct_offer",
         "name": "Oferta directa",
+        "kind": "whatsapp",
+        "audience": "cliente",
         "template": (
             "Hola {name}, ayudamos a negocios como el suyo en {category} ({address}). "
             "Rating {rating}★ ({reviews_count} reseñas). "

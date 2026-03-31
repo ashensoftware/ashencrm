@@ -141,12 +141,14 @@ function App() {
               element={
                 <TinderPage
                   prospect={selectedProspect}
+                  mode={actions.tinderMode}
+                  onModeChange={actions.setTinderMode}
                   onClose={() => {
                     modals.setModal(null);
                     navigate("/leads/panel");
                   }}
                   onReject={() => actions.handleReview("reject")}
-                  onAccept={() => actions.handleReview("accept")}
+                  onAccept={actions.handleTinderAccept}
                   onContact={() => actions.handleReview("contact")}
                   onNext={actions.handleTinderNext}
                   onPrev={actions.handleTinderPrev}
@@ -253,7 +255,7 @@ function App() {
             if (currentLeadsView === "tinder") navigate("/leads/panel");
           }}
           onReject={() => actions.handleReview("reject")}
-          onAccept={() => actions.handleReview("accept")}
+          onAccept={actions.handleTinderAccept}
           onContact={() => actions.handleReview("contact")}
           onNext={actions.handleTinderNext}
           onPrev={actions.handleTinderPrev}

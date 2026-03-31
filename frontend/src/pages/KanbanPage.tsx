@@ -12,7 +12,6 @@ interface Props {
 const COLUMNS = [
   { status: "ready", label: "Potencial", color: "#58a6ff" },
   { status: "prompt_gpt", label: "Prompt GPT", color: "#f59e0b" },
-  { status: "creating_demo", label: "Creando Demo", color: "#f97316" },
   { status: "demo_created", label: "Demo Lista", color: "#a78bfa" },
   { status: "contacted", label: "Contactado", color: "#2ea043" },
   { status: "client_won", label: "Cliente Obtenido", color: "#10b981" },

@@ -72,9 +72,11 @@ class ProspectRepository:
                     ig_phone TEXT DEFAULT '',
                     ig_website TEXT DEFAULT '',
                     demo_url TEXT DEFAULT '',
+                    demo_rating REAL DEFAULT 0.0,
                     screenshot_path TEXT DEFAULT '',
                     lovable_account_used TEXT DEFAULT '',
                     prompt_used TEXT DEFAULT '',
+                    lovable_prompt TEXT DEFAULT '',
                     whatsapp_message TEXT DEFAULT '',
                     status TEXT DEFAULT 'scraped',
                     scraped_at TEXT DEFAULT '',
@@ -168,6 +170,16 @@ class ProspectRepository:
                 conn.execute(
                     "ALTER TABLE prospects ADD COLUMN whatsapp_message TEXT DEFAULT ''"
                 )
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute(
+                    "ALTER TABLE prospects ADD COLUMN lovable_prompt TEXT DEFAULT ''"
+                )
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE prospects ADD COLUMN demo_rating REAL DEFAULT 0.0")
             except sqlite3.OperationalError:
                 pass
             try:

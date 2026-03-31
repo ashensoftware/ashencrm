@@ -56,7 +56,7 @@ export function reviewProspect(name: string, action: string) {
   return request(`/prospects/${encodeURIComponent(name)}/review?action=${action}`, { method: "POST" });
 }
 
-export function updateProspect(name: string, data: Record<string, string>) {
+export function updateProspect(name: string, data: Record<string, string | number | boolean | null>) {
   return request(`/prospects/${encodeURIComponent(name)}`, {
     method: "PATCH",
     body: JSON.stringify(data),

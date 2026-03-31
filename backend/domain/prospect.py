@@ -45,9 +45,11 @@ class Prospect:
     ig_phone: str = ""
     ig_website: str = ""
     demo_url: str = ""
+    demo_rating: float = 0.0
     screenshot_path: str = ""
     lovable_account_used: str = ""
     prompt_used: str = ""
+    lovable_prompt: str = ""
     whatsapp_message: str = ""
     status: str = ProspectStatus.SCRAPED.value
     scraped_at: str = ""

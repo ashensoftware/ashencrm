@@ -1,9 +1,13 @@
 """
-Script para borrar todos los leads existentes y re-scrapear 200+ leads frescos.
-Ejecutar con el venv activo: python rescrape_all.py
+Script para re-scrapear leads en bloque sin perder estados manuales existentes.
+Ejecutar con el venv activo:
+  python rescrape_all.py
+Si quieres reiniciar todo desde cero:
+  python rescrape_all.py --clear-existing
 """
 
 import asyncio
+import argparse
 import platform
 import sqlite3
 from pathlib import Path
@@ -55,8 +59,25 @@ def map_native_to_catalog(native_cat: str, catalog_name: str) -> str:
     return catalog_name
 
 
-async def run_scrape():
-    clear_all_leads()
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Re-scrape masivo de leads preservando estados existentes por defecto."
+    )
+    parser.add_argument(
+        "--clear-existing",
+        action="store_true",
+        help="Borra todos los leads antes de scrapear (pierde estados manuales).",
+    )
+    return parser.parse_args()
+
+
+async def run_scrape(clear_existing: bool = False):
+    if clear_existing:
+        clear_all_leads()
+    else:
+        print(
+            "[MODO SEGURO] No se borrarán leads existentes; se preservan estados manuales."
+        )
 
     db = ProspectRepository(db_path=DB_PATH)
     total_inserted = 0
@@ -105,4 +126,5 @@ async def run_scrape():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_scrape())
+    args = parse_args()
+    asyncio.run(run_scrape(clear_existing=args.clear_existing))

@@ -23,8 +23,10 @@ class PatchProspectData(BaseModel):
     address: Optional[str] = None
     prompt_used: Optional[str] = None
     demo_url: Optional[str] = None
+    demo_rating: Optional[float] = None
     whatsapp_message: Optional[str] = None
     lovable_account_used: Optional[str] = None
+    lovable_prompt: Optional[str] = None
 
 
 class RenameCategoryRequest(BaseModel):

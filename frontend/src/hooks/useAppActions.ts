@@ -27,7 +27,23 @@ export function useAppActions(
   const [scrapeFormOpen, setScrapeFormOpen] = useState(false);
   const [registrySearch, setRegistrySearch] = useState("");
   const [tinderHistory, setTinderHistory] = useState<Prospect[]>([]);
+  const [tinderMode, setTinderMode] = useState<"quick_accept" | "full_flow">("quick_accept");
   const [editForm, setEditForm] = useState({ name: "", category: "", phone: "", address: "" });
+
+  const fetchNextScraped = useCallback(async () => {
+    const next = await fetchRandomProspect("scraped");
+    if (next && "message" in next) {
+      await modals.showAlert(MSG.FINISH, next.message || MSG.NO_LEADS);
+      setSelectedProspect(null);
+      navigate("/leads/panel");
+      return;
+    }
+    if (next?.name) {
+      setSelectedProspect(next as Prospect);
+    } else {
+      setSelectedProspect(null);
+    }
+  }, [modals, navigate]);
 
   const handleHexClick = useCallback(
     async (_hex: unknown, latlng: { lat: number; lng: number }) => {
@@ -58,19 +74,22 @@ export function useAppActions(
       const r = await reviewProspect(selectedProspect.name, action);
       if (!r.ok) return;
       await refresh();
-      const next = await fetchRandomProspect("scraped");
-      if (next && "message" in next) {
-        await modals.showAlert(MSG.FINISH, next.message || MSG.NO_LEADS);
-        setSelectedProspect(null);
-        navigate("/leads/panel");
-      } else if (next?.name) {
-        setSelectedProspect(next as Prospect);
-      } else {
-        setSelectedProspect(null);
-      }
+      await fetchNextScraped();
     },
-    [selectedProspect, refresh, modals, navigate]
+    [selectedProspect, refresh, fetchNextScraped]
   );
+
+  const handleTinderAccept = useCallback(async () => {
+    if (!selectedProspect) return;
+    if (tinderMode === "full_flow") {
+      const r = await updateProspect(selectedProspect.name, { status: "ready" });
+      if (!r.ok) return;
+      await refresh();
+      await fetchNextScraped();
+      return;
+    }
+    await handleReview("accept");
+  }, [selectedProspect, tinderMode, refresh, fetchNextScraped, handleReview]);
 
   const handleTinderNext = useCallback(async () => {
     navigate("/leads/tinder");
@@ -173,11 +192,14 @@ export function useAppActions(
     registrySearch,
     setRegistrySearch,
     tinderHistory,
+    tinderMode,
+    setTinderMode,
     editForm,
     setEditForm,
     handleHexClick,
     handleScrape,
     handleReview,
+    handleTinderAccept,
     handleTinderNext,
     handleTinderPrev,
     handleEditSubmit,

@@ -152,7 +152,7 @@ export function AdminPage({
   const addTemplate = () => {
     if (!draft) return;
     const id = `tpl_${Date.now()}`;
-    const row: WhatsappTemplate = { id, name: "Nueva", template: "Hola {name}, " };
+    const row: WhatsappTemplate = { id, name: "Nueva", kind: "whatsapp", audience: "cliente", template: "Hola {name}, " };
     setDraft({
       ...draft,
       whatsapp_templates: [...draft.whatsapp_templates, row],
@@ -258,12 +258,12 @@ export function AdminPage({
       <div style={{ padding: "1.5rem", borderBottom: "1px solid var(--border)" }}>
         <h1 style={{ margin: 0, fontSize: "1.5rem", color: "white" }}>Administracion</h1>
         <p style={{ margin: "0.25rem 0 0", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-          Categorias del catalogo, parametros operativos y plantillas de mensajes (persistidos en la base de datos).
+          Categorias del catalogo, parametros operativos y plantillas configurables (persistidas en base de datos).
         </p>
         <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", flexWrap: "wrap" }}>
           {tabBtn("categories", <Tags size={18} />, "Categorias")}
           {tabBtn("parameters", <SlidersHorizontal size={18} />, "Parametros")}
-          {tabBtn("templates", <MessageSquare size={18} />, "Plantillas WhatsApp")}
+          {tabBtn("templates", <MessageSquare size={18} />, "Plantillas")}
         </div>
       </div>
 
@@ -392,9 +392,9 @@ export function AdminPage({
           <div className="admin-templates-layout">
             <div className="admin-templates-topbar">
               <div>
-                <h2 className="admin-templates-title">Plantillas de WhatsApp</h2>
+                <h2 className="admin-templates-title">Plantillas</h2>
                 <p className="admin-templates-subtitle">
-                  El envío automático usa la plantilla <strong>first_contact</strong> (o la primera de la lista). Cada plantilla se guarda con su propio botón cuando la edites.
+                  Define plantillas por tipo y destino (GPT, Lovable, WhatsApp). Cada plantilla se guarda con su propio botón cuando la edites.
                 </p>
               </div>
             </div>
@@ -442,6 +442,30 @@ export function AdminPage({
                         placeholder="Nombre visible"
                         aria-label={`Nombre plantilla ${t.id}`}
                       />
+                      <select
+                        className="search-input"
+                        style={{ width: "150px" }}
+                        value={t.kind || "whatsapp"}
+                        onChange={(e) => updateTemplate(i, "kind", e.target.value)}
+                        onFocus={() => setActiveTemplateIndex(i)}
+                        aria-label={`Tipo plantilla ${t.id}`}
+                      >
+                        <option value="whatsapp">WhatsApp</option>
+                        <option value="gpt">GPT</option>
+                        <option value="lovable">Lovable</option>
+                      </select>
+                      <select
+                        className="search-input"
+                        style={{ width: "150px" }}
+                        value={t.audience || "cliente"}
+                        onChange={(e) => updateTemplate(i, "audience", e.target.value)}
+                        onFocus={() => setActiveTemplateIndex(i)}
+                        aria-label={`Destino plantilla ${t.id}`}
+                      >
+                        <option value="cliente">Cliente</option>
+                        <option value="ia">IA</option>
+                        <option value="equipo_interno">Equipo interno</option>
+                      </select>
                       {isTemplateRowDirty(i) && (
                         <button
                           type="button"

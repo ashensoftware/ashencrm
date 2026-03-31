@@ -5,6 +5,8 @@ import { Check, X as XIcon, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Props {
   prospect: Prospect | null;
+  mode?: "quick_accept" | "full_flow";
+  onModeChange?: (mode: "quick_accept" | "full_flow") => void;
   onClose: () => void;
   onReject?: () => void;
   onAccept?: () => void;
@@ -86,6 +88,22 @@ export function TinderPage(props: Props) {
 
   return (
     <div style={{ width: "100%", height: "100%", position: "relative", backgroundColor: "var(--bg-base)", overflow: "hidden" }}>
+      <div style={{ position: "absolute", top: "0.8rem", left: "50%", transform: "translateX(-50%)", zIndex: 20, display: "flex", gap: "0.4rem", background: "rgba(0,0,0,0.45)", border: "1px solid var(--border)", padding: "0.3rem", borderRadius: "999px" }}>
+        <button
+          className={props.mode === "quick_accept" ? "btn-primary" : "btn-secondary"}
+          style={{ padding: "0.45rem 0.7rem", borderRadius: "999px", fontSize: "0.8rem" }}
+          onClick={() => props.onModeChange?.("quick_accept")}
+        >
+          Solo aceptar
+        </button>
+        <button
+          className={props.mode === "full_flow" ? "btn-primary" : "btn-secondary"}
+          style={{ padding: "0.45rem 0.7rem", borderRadius: "999px", fontSize: "0.8rem" }}
+          onClick={() => props.onModeChange?.("full_flow")}
+        >
+          Flujo completo
+        </button>
+      </div>
       
       {/* Background Overlay Feedback */}
       <div style={{ position: "absolute", inset: 0, backgroundColor: bgColor, pointerEvents: "none", zIndex: 1, display: "flex", alignItems: "center", justifyContent: dragX > 0 ? "flex-start" : "flex-end", padding: "4rem", transition: isDragging ? "none" : "background-color 0.3s" }}>

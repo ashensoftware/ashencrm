@@ -107,6 +107,37 @@ export async function patchAdminSettings(partial: Partial<AppSettings>): Promise
   return res.json();
 }
 
+export type SqlConsoleResult =
+  | {
+      kind: "select";
+      columns: string[];
+      rows: Record<string, unknown>[];
+      rowcount: number;
+      truncated: boolean;
+    }
+  | { kind: "mutate"; rowcount: number };
+
+export async function fetchSqlConsoleStatus(): Promise<{ enabled: boolean }> {
+  const res = await request("/admin/sql/status");
+  if (!res.ok) throw new Error("No se pudo cargar el estado de la consola SQL");
+  return res.json();
+}
+
+export async function executeAdminSql(sql: string): Promise<SqlConsoleResult> {
+  const res = await request("/admin/sql", {
+    method: "POST",
+    body: JSON.stringify({ sql }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = data as { detail?: string | string[] };
+    const d = err.detail;
+    const msg = Array.isArray(d) ? d.join(", ") : d || "Error al ejecutar SQL";
+    throw new Error(msg);
+  }
+  return data as SqlConsoleResult;
+}
+
 export function patchCatalogCategory(name: string, body: { label?: string; icon?: string }) {
   return request(`/catalog/categories/${encodeURIComponent(name)}`, {
     method: "PATCH",

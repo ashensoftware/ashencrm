@@ -8,13 +8,37 @@ import {
   renameCatalogCategory,
   resetCategoryAssignments,
   normalizeCategories,
+  fetchSqlConsoleStatus,
+  executeAdminSql,
+  type SqlConsoleResult,
 } from "../api";
-import { Tags, SlidersHorizontal, MessageSquare, ChevronLeft, ChevronRight, Save, Loader2, Braces, Trash2 } from "lucide-react";
+import { Tags, SlidersHorizontal, MessageSquare, ChevronLeft, ChevronRight, Save, Loader2, Braces, Trash2, Terminal } from "lucide-react";
 import { IconPickerModal } from "../organisms/modals/IconPickerModal";
 import { LucideCategoryIcon, getCategoryIconLabel } from "../utils/categoryLucideIcons";
 import { WHATSAPP_TEMPLATE_PLACEHOLDERS } from "../constants/whatsappTemplatePlaceholders";
 
-type Tab = "categories" | "parameters" | "templates";
+type Tab = "categories" | "parameters" | "templates" | "sql";
+
+function formatSqlCell(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
+const SQL_EXAMPLES = `-- Cuántos leads siguen en "scraped" (sin tocar / aún no en pipeline)
+SELECT COUNT(*) AS n FROM prospects WHERE status = 'scraped';
+
+-- Borrar solo esos (para volver a scrapear desde cero con los fixes)
+DELETE FROM prospects WHERE status = 'scraped';
+
+-- Igual pero sin borrar filas que ya tengan ficha de cliente vinculada
+DELETE FROM prospects
+WHERE status = 'scraped'
+  AND id NOT IN (SELECT prospect_id FROM clients WHERE prospect_id IS NOT NULL);
+
+-- Tablas en la base (SQLite)
+SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;
+`;
 
 interface Props {
   catalog: CatalogItem[];
@@ -42,6 +66,12 @@ export function AdminPage({
   const [savingTemplateIndex, setSavingTemplateIndex] = useState<number | null>(null);
   const [templateDeleteIndex, setTemplateDeleteIndex] = useState<number | null>(null);
   const textareaRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
+
+  const [sqlText, setSqlText] = useState("");
+  const [sqlBusy, setSqlBusy] = useState(false);
+  const [sqlResult, setSqlResult] = useState<SqlConsoleResult | null>(null);
+  const [sqlError, setSqlError] = useState<string | null>(null);
+  const [sqlEnabled, setSqlEnabled] = useState<boolean | null>(null);
 
   const loadDraft = useCallback(async () => {
     try {
@@ -226,6 +256,25 @@ export function AdminPage({
     setNotice("Categorias normalizadas.");
   };
 
+  const runAdminSql = async () => {
+    setSqlError(null);
+    setSqlResult(null);
+    setNotice(null);
+    setSqlBusy(true);
+    try {
+      const r = await executeAdminSql(sqlText);
+      setSqlResult(r);
+      if (r.kind === "mutate") {
+        await refreshProspects();
+        setNotice(`SQL ejecutado. Filas afectadas: ${r.rowcount}`);
+      }
+    } catch (e) {
+      setSqlError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setSqlBusy(false);
+    }
+  };
+
   const catTotalPages = Math.max(1, Math.ceil(catalog.length / catPageSize) || 1);
   const paginatedCatalog = useMemo(() => {
     const start = (catPage - 1) * catPageSize;
@@ -238,6 +287,21 @@ export function AdminPage({
 
   useEffect(() => {
     if (tab !== "templates") setTemplateDeleteIndex(null);
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab !== "sql") return;
+    let cancelled = false;
+    fetchSqlConsoleStatus()
+      .then((s) => {
+        if (!cancelled) setSqlEnabled(s.enabled);
+      })
+      .catch(() => {
+        if (!cancelled) setSqlEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [tab]);
 
   const tabBtn = (id: Tab, icon: ReactNode, label: string) => (
@@ -264,6 +328,7 @@ export function AdminPage({
           {tabBtn("categories", <Tags size={18} />, "Categorias")}
           {tabBtn("parameters", <SlidersHorizontal size={18} />, "Parametros")}
           {tabBtn("templates", <MessageSquare size={18} />, "Plantillas")}
+          {tabBtn("sql", <Terminal size={18} />, "SQL")}
         </div>
       </div>
 
@@ -386,6 +451,144 @@ export function AdminPage({
 
         {tab === "parameters" && draft && (
           <ParametersForm draft={draft} setDraft={setDraft} onSave={saveParams} />
+        )}
+
+        {tab === "sql" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem", maxWidth: "min(100%, 960px)" }}>
+            <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: 1.55 }}>
+              Ejecuta <strong>una sentencia</strong> SQLite sobre la base del CRM (<code>prospects.db</code>). Útil para
+              inspeccionar datos o borrar leads <code>scraped</code> antes de un rescrape. En entornos expuestos desactiva
+              la consola con <code style={{ fontSize: "0.85em" }}>ALLOW_SQL_CONSOLE=0</code> en <code>.env</code>.
+            </p>
+            {sqlEnabled === false && (
+              <div
+                style={{
+                  padding: "0.75rem 1rem",
+                  borderRadius: "8px",
+                  background: "rgba(239, 68, 68, 0.12)",
+                  border: "1px solid rgba(239, 68, 68, 0.35)",
+                  color: "var(--text-secondary)",
+                  fontSize: "0.9rem",
+                }}
+              >
+                La consola SQL está deshabilitada en el servidor. Añade <code>ALLOW_SQL_CONSOLE=1</code> en{" "}
+                <code>.env</code> y reinicia el backend.
+              </div>
+            )}
+            <textarea
+              className="search-input"
+              value={sqlText}
+              onChange={(e) => setSqlText(e.target.value)}
+              placeholder="SELECT * FROM prospects LIMIT 10;"
+              spellCheck={false}
+              style={{
+                width: "100%",
+                minHeight: "140px",
+                fontFamily: "ui-monospace, Consolas, monospace",
+                fontSize: "0.85rem",
+                lineHeight: 1.45,
+              }}
+            />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={sqlBusy || sqlEnabled === false || !sqlText.trim()}
+                onClick={() => void runAdminSql()}
+              >
+                {sqlBusy ? (
+                  <>
+                    <Loader2 size={16} className="admin-spin" /> Ejecutando…
+                  </>
+                ) : (
+                  <>
+                    <Terminal size={16} /> Ejecutar
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setSqlText(SQL_EXAMPLES);
+                  setSqlResult(null);
+                  setSqlError(null);
+                }}
+              >
+                Pegar ejemplos (rescrape)
+              </button>
+            </div>
+            {sqlError && (
+              <div
+                style={{
+                  padding: "0.75rem 1rem",
+                  borderRadius: "8px",
+                  background: "rgba(239, 68, 68, 0.1)",
+                  border: "1px solid rgba(239, 68, 68, 0.3)",
+                  color: "#fca5a5",
+                  fontSize: "0.85rem",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {sqlError}
+              </div>
+            )}
+            {sqlResult?.kind === "mutate" && (
+              <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                Sentencia ejecutada. Filas afectadas: <strong>{sqlResult.rowcount}</strong>
+              </p>
+            )}
+            {sqlResult?.kind === "select" && sqlResult.columns.length > 0 && (
+              <div style={{ overflow: "auto", border: "1px solid var(--border)", borderRadius: "8px", maxHeight: "420px" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+                  <thead>
+                    <tr style={{ background: "var(--bg-elevated)", position: "sticky", top: 0 }}>
+                      {sqlResult.columns.map((c) => (
+                        <th key={c} style={{ textAlign: "left", padding: "0.5rem 0.65rem", borderBottom: "1px solid var(--border)" }}>
+                          {c}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sqlResult.rows.map((row, i) => (
+                      <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+                        {sqlResult.columns.map((c) => (
+                          <td key={c} style={{ padding: "0.45rem 0.65rem", verticalAlign: "top", wordBreak: "break-word" }}>
+                            {formatSqlCell(row[c])}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {sqlResult.truncated && (
+                  <p style={{ margin: 0, padding: "0.5rem 0.65rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                    Hay más filas no mostradas (límite del visor en el servidor).
+                  </p>
+                )}
+              </div>
+            )}
+            {sqlResult?.kind === "select" && sqlResult.columns.length === 0 && (
+              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "0.9rem" }}>Sin filas.</p>
+            )}
+            <details style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>
+              <summary style={{ cursor: "pointer", marginBottom: "0.35rem" }}>Texto de los ejemplos</summary>
+              <pre
+                style={{
+                  margin: 0,
+                  padding: "0.75rem",
+                  background: "var(--bg-elevated)",
+                  borderRadius: "8px",
+                  overflow: "auto",
+                  fontSize: "0.78rem",
+                  lineHeight: 1.4,
+                }}
+              >
+                {SQL_EXAMPLES}
+              </pre>
+            </details>
+          </div>
         )}
 
         {tab === "templates" && draft && (

@@ -55,9 +55,14 @@ def main():
     install_h3_if_needed(root)
     
     print("Iniciando Ashen CRM...")
+    print("Recarga automatica: API (uvicorn --reload en /backend) + frontend (Vite HMR en :5173).")
+    print("En desarrollo abre el dashboard en http://localhost:5173 — el puerto 8000 sirve la API y archivos estaticos sin HMR.")
     
-    # Comandos
-    backend_cmd = "call .venv\\Scripts\\activate.bat && python -m uvicorn backend.main:app --reload --port 8000"
+    # Backend: --reload + --reload-dir solo en `backend` para no reiniciar al escribir en data/*.db
+    backend_cmd = (
+        "call .venv\\Scripts\\activate.bat && python -m uvicorn backend.main:app "
+        "--reload --reload-dir backend --port 8000"
+    )
     frontend_cmd = "cd frontend && npm run dev"
     
     if front_logs or back_logs:

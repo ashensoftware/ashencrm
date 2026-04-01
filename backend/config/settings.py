@@ -64,6 +64,13 @@ class OutreachConfig:
     whatsapp_max_daily: int = int(os.getenv("WHATSAPP_MAX_DAILY", "25"))
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
 @dataclass
 class Settings:
     scraper: ScraperConfig = field(default_factory=ScraperConfig)
@@ -76,6 +83,8 @@ class Settings:
     db_path: Path = PROJECT_ROOT / "data" / "db" / "prospects.db"
     sessions_dir: Path = PROJECT_ROOT / "data" / "sessions"
     exports_dir: Path = PROJECT_ROOT / "data" / "exports"
+    # Consola SQL en /api/admin/sql (desactivar en entornos expuestos: ALLOW_SQL_CONSOLE=0)
+    sql_console_enabled: bool = field(default_factory=lambda: _env_bool("ALLOW_SQL_CONSOLE", True))
 
     def __post_init__(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)

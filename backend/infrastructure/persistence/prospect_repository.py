@@ -2,10 +2,11 @@
 
 import csv
 import json
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from backend.config.settings import settings
 from backend.domain.prospect import Prospect, ProspectStatus
@@ -316,6 +317,70 @@ class ProspectRepository:
                 params,
             )
             conn.commit()
+
+    SQL_CONSOLE_MAX_ROWS = 2000
+
+    def execute_sql_console(self, sql: str) -> dict[str, Any]:
+        """
+        Una sola sentencia SQLite; SELECT/PRAGMA/EXPLAIN devuelven filas; el resto hace commit.
+        Pensado solo para la consola de administración (proteger con ALLOW_SQL_CONSOLE).
+        """
+        raw = (sql or "").strip()
+        if not raw:
+            raise ValueError("SQL vacío")
+        stmt = raw.rstrip(";").strip()
+        if not stmt:
+            raise ValueError("SQL vacío")
+        if ";" in stmt:
+            raise ValueError("Solo una sentencia a la vez (sin punto y coma interior)")
+        for pat in (r"\bATTACH\b", r"\bDETACH\b", r"\bVACUUM\b"):
+            if re.search(pat, stmt, re.IGNORECASE):
+                raise ValueError("Esta sentencia no está permitida (ATTACH/DETACH/VACUUM)")
+
+        parts = stmt.split(None, 1)
+        verb = parts[0].upper() if parts else ""
+        read_only = verb in (
+            "SELECT",
+            "WITH",
+            "PRAGMA",
+            "EXPLAIN",
+        )
+
+        def row_to_dict(description: list, row: sqlite3.Row) -> dict[str, Any]:
+            out: dict[str, Any] = {}
+            for i, col in enumerate(description):
+                v = row[i]
+                if isinstance(v, bytes):
+                    v = v.decode("utf-8", errors="replace")
+                out[col] = v
+            return out
+
+        with self._get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute(stmt)
+            if read_only:
+                desc = [d[0] for d in (cur.description or [])]
+                rows_out: list[dict[str, Any]] = []
+                cap = self.SQL_CONSOLE_MAX_ROWS
+                while len(rows_out) < cap:
+                    chunk = cur.fetchmany(min(500, cap - len(rows_out)))
+                    if not chunk:
+                        break
+                    for row in chunk:
+                        rows_out.append(row_to_dict(desc, row))
+                truncated = False
+                if len(rows_out) == cap:
+                    extra = cur.fetchone()
+                    truncated = extra is not None
+                return {
+                    "kind": "select",
+                    "columns": desc,
+                    "rows": rows_out,
+                    "rowcount": len(rows_out),
+                    "truncated": truncated,
+                }
+            conn.commit()
+            return {"kind": "mutate", "rowcount": cur.rowcount}
 
     def count_by_status(self) -> dict[str, int]:
         with self._conn() as conn:

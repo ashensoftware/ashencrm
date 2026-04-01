@@ -101,6 +101,7 @@ export function ProspectDetailModal({
     instagram_handle: prospect.instagram_handle || "",
     category: prospect.category || "",
     maps_url: prospect.maps_url || "",
+    screenshot_path: prospect.screenshot_path || "",
   });
 
   const [promptText, setPromptText] = useState(prospect.prompt_used || "");
@@ -149,6 +150,7 @@ export function ProspectDetailModal({
       instagram_handle: initialProspect.instagram_handle || "",
       category: initialProspect.category || "",
       maps_url: initialProspect.maps_url || "",
+      screenshot_path: initialProspect.screenshot_path || "",
     });
     setPromptText(initialProspect.prompt_used || "");
     setLovablePromptText(initialProspect.lovable_prompt || "");
@@ -206,9 +208,17 @@ export function ProspectDetailModal({
       instagram_handle: editForm.instagram_handle,
       category: editForm.category,
       maps_url: editForm.maps_url,
+      screenshot_path: editForm.screenshot_path.trim(),
     });
     setIsEditing(false);
   };
+
+  const editImagePreviewUrl =
+    editForm.screenshot_path.trim().length === 0
+      ? null
+      : editForm.screenshot_path.trim().startsWith("http")
+        ? editForm.screenshot_path.trim()
+        : getScreenshotUrl(editForm.screenshot_path.trim());
 
   return (
     <div 
@@ -286,6 +296,39 @@ export function ProspectDetailModal({
               <div style={{ gridColumn: '1 / -1' }}>
                 <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Dirección</label>
                 <input type="text" className="dialog-input" value={editForm.address} onChange={e => setEditForm(f => ({...f, address: e.target.value}))} placeholder="Calle 1 # 2-3" />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Imagen / logo (URL o nombre de archivo en capturas)</label>
+                <input
+                  type="text"
+                  className="dialog-input"
+                  value={editForm.screenshot_path}
+                  onChange={(e) => setEditForm((f) => ({ ...f, screenshot_path: e.target.value }))}
+                  placeholder="https://… (imagen pública) o archivo guardado en data/screenshots"
+                />
+                <p style={{ margin: "0.35rem 0 0", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                  Deja vacío para quitar la imagen. URLs https se muestran tal cual; rutas locales usan el servidor de capturas.
+                </p>
+                {editImagePreviewUrl ? (
+                  <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                    <img
+                      src={editImagePreviewUrl}
+                      alt=""
+                      style={{
+                        width: 72,
+                        height: 72,
+                        borderRadius: 10,
+                        objectFit: "cover",
+                        border: "1px solid var(--border)",
+                        background: "var(--bg-elevated)",
+                      }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                    <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Vista previa</span>
+                  </div>
+                ) : null}
               </div>
               <div style={{ gridColumn: '1 / -1' }}>
                 <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Google Maps URL</label>

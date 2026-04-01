@@ -216,13 +216,11 @@ class GoogleMapsScraper:
                             await asyncio.sleep(random.uniform(1.5, 2.5))
                             detail_text = await self.page.inner_text("body")
 
-                            # --- Extract photo URL from detail panel ---
+                            # --- Foto: solo hero del lugar (ver _extract_place_photo_from_maps_page) ---
                             try:
-                                photo_el = await self.page.query_selector('img.p-img, button[jsaction*="pane.heroHeaderImage"] img, img[decoding="async"][src*="googleusercontent"]')
-                                if photo_el:
-                                    detail_photo = await photo_el.get_attribute("src") or ""
+                                detail_photo = await self._extract_place_photo_from_maps_page()
                             except Exception:
-                                pass
+                                detail_photo = ""
 
                             # --- Sitio web: solo botón oficial del panel (no primer http de la página) ---
                             detail_website = await extract_official_website_from_maps_page(
@@ -386,6 +384,47 @@ class GoogleMapsScraper:
             return float(match_bang.group(1)), float(match_bang.group(2))
 
         return 0.0, 0.0
+
+    async def _extract_place_photo_from_maps_page(self) -> str:
+        """
+        Imagen de portada del negocio en el panel de detalle.
+
+        No usar un selector global `img[src*=googleusercontent]`: el primero en el DOM
+        suele ser el avatar de la cuenta de Google en la barra superior, no la foto del lugar.
+        """
+        page = self.page
+        try:
+            await page.wait_for_selector(
+                'button[jsaction*="pane.heroHeaderImage"] img',
+                timeout=8000,
+            )
+        except Exception:
+            pass
+        selectors = [
+            'button[jsaction*="pane.heroHeaderImage"] img',
+            'button[jsaction*="heroHeaderImage"] img',
+        ]
+        for sel in selectors:
+            try:
+                photo_el = await page.query_selector(sel)
+                if photo_el:
+                    src = (await photo_el.get_attribute("src")) or ""
+                    if src.strip():
+                        return src.strip()
+            except Exception:
+                continue
+        # Respaldo: img de portada solo dentro del botón/cabecera del panel (no feed ni header)
+        try:
+            scoped = await page.query_selector(
+                'div[role="region"]:has(button[jsaction*="pane.heroHeaderImage"]) img.p-img'
+            )
+            if scoped:
+                src = (await scoped.get_attribute("src")) or ""
+                if src.strip():
+                    return src.strip()
+        except Exception:
+            pass
+        return ""
 
     async def close(self):
         """Cierra el navegador."""

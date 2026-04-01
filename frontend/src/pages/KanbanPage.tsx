@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import type { Prospect } from "../types";
+import { getScreenshotUrl } from "../api";
 import { Eye, Phone, Globe, MessageCircle, Building2, X } from "lucide-react";
 
 interface Props {
@@ -26,9 +27,9 @@ function ProspectCard({ prospect, onSelect, onWhatsApp, onDragStart }: {
   const phone = prospect.phone || prospect.ig_phone;
   const website = prospect.website || prospect.ig_website;
   const initial = prospect.name?.charAt(0)?.toUpperCase() || "?";
-  const pfp = prospect.screenshot_path
-    ? `http://localhost:8000/screenshots/${prospect.screenshot_path.split(/[\\/]/).pop()}`
-    : null;
+  const pfp = prospect.screenshot_path?.startsWith("http")
+    ? prospect.screenshot_path
+    : getScreenshotUrl(prospect.screenshot_path);
   const [imgError, setImgError] = useState(false);
 
   return (

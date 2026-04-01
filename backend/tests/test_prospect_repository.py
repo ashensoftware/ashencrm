@@ -26,6 +26,15 @@ def test_insert_and_get_prospect(repo):
     assert prospects[0].name == "Test Cafe"
     assert prospects[0].status == ProspectStatus.SCRAPED.value
 
+
+def test_exists_by_name_and_address(repo):
+    p = Prospect(name="Dup Check", category="cafe", address="Calle 1 #2")
+    assert repo.exists_by_name_and_address("Dup Check", "Calle 1 #2") is False
+    assert repo.insert_prospect(p) is True
+    assert repo.exists_by_name_and_address("Dup Check", "Calle 1 #2") is True
+    assert repo.exists_by_name_and_address("Dup Check", "Otra") is False
+
+
 def test_update_status(repo):
     p = Prospect(name="Test Update", category="otros", address="123")
     repo.insert_prospect(p)

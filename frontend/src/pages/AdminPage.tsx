@@ -267,6 +267,13 @@ export function AdminPage({
       if (r.kind === "mutate") {
         await refreshProspects();
         setNotice(`SQL ejecutado. Filas afectadas: ${r.rowcount}`);
+      } else if (r.kind === "select") {
+        const n = r.rows.length;
+        setNotice(
+          r.truncated
+            ? `Consulta: mostrando las primeras ${n} filas (hay más; límite de la consola).`
+            : `Consulta: ${n} fila(s). Resultados en la tabla de abajo.`,
+        );
       }
     } catch (e) {
       setSqlError(e instanceof Error ? e.message : "Error");

@@ -25,6 +25,15 @@ def test_execute_sql_console_select(repo: ProspectRepository):
     assert out["truncated"] is False
 
 
+def test_execute_sql_console_select_after_line_comments(repo: ProspectRepository):
+    sql = """-- Vista previa
+-- otra línea
+SELECT 2 AS x"""
+    out = repo.execute_sql_console(sql)
+    assert out["kind"] == "select"
+    assert out["rows"] == [{"x": 2}]
+
+
 def test_execute_sql_console_rejects_attach(repo: ProspectRepository):
     with pytest.raises(ValueError, match="no está permitida"):
         repo.execute_sql_console("ATTACH DATABASE 'x.db' AS x")

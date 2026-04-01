@@ -4,9 +4,10 @@ import asyncio
 import platform
 import random
 import re
-from typing import List, Optional
+from typing import Callable, List, Optional
 from playwright.async_api import async_playwright, Page
 from backend.domain.prospect import Prospect, ProspectStatus
+from backend.core.maps_website import instagram_handle_plausible_for_business
 from backend.scraper.maps_instagram import extract_instagram_from_place_panel
 from backend.scraper.maps_website import extract_official_website_from_maps_page
 
@@ -48,6 +49,7 @@ class GoogleMapsScraper:
         lon: Optional[float] = None,
         zoom: int = 16,
         log_callback: Optional[callable] = None,
+        skip_if_in_db: Optional[Callable[[str, str], bool]] = None,
     ) -> List[Prospect]:
         def log(msg):
             if log_callback:
@@ -106,7 +108,8 @@ class GoogleMapsScraper:
         seen_cover_urls: set[str] = set()
 
         scroll_attempts = 0
-        max_scroll_attempts = 50
+        max_scroll_attempts = 120 if skip_if_in_db else 50
+        skipped_in_db = 0
 
         while len(prospects) < limit and scroll_attempts < max_scroll_attempts:
 
@@ -208,6 +211,19 @@ class GoogleMapsScraper:
                     if lat_found == 0.0:
                         log(f"Sin coordenadas para: {name}")
 
+                    if skip_if_in_db is not None:
+                        try:
+                            exists = await asyncio.to_thread(
+                                skip_if_in_db, name, address
+                            )
+                        except Exception:
+                            exists = False
+                        if exists:
+                            skipped_in_db += 1
+                            seen_keys.add(key)
+                            log(f"Omitido (ya en BD): {name}")
+                            continue
+
                     detail_reviews = 0
                     detail_website = ""
                     detail_phone = ""
@@ -236,7 +252,16 @@ class GoogleMapsScraper:
                                     self.page
                                 )
                                 if ig_official:
-                                    detail_instagram = ig_official
+                                    ig_m = re.search(
+                                        r"instagram\.com/([^/?]+)", ig_official
+                                    )
+                                    cand = ig_m.group(1) if ig_m else ""
+                                    if cand and instagram_handle_plausible_for_business(
+                                        cand,
+                                        name,
+                                        detail_website or "",
+                                    ):
+                                        detail_instagram = ig_official
                             except Exception:
                                 pass
 
@@ -353,6 +378,15 @@ class GoogleMapsScraper:
             if end_msg:
                 print("Fin alcanzado.")
                 break
+
+        if skip_if_in_db and skipped_in_db:
+            log(
+                f"Resumen: {skipped_in_db} tarjetas saltadas (misma clave name+address que en BD)."
+            )
+        if skip_if_in_db and len(prospects) < limit:
+            log(
+                f"Aviso: solo se obtuvieron {len(prospects)}/{limit} nuevos (lista de Maps o scroll agotado)."
+            )
 
         return prospects
 

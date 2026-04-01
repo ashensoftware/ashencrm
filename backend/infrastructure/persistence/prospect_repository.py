@@ -34,6 +34,30 @@ DEFAULT_CATEGORIES = [
 MIGRATION_CATEGORY_DEFAULT_ICONS_V1 = "migration_category_default_icons_v1"
 
 
+def _leading_sql_verb(stmt: str) -> str:
+    """
+    Primer verbo de la sentencia, ignorando líneas vacías y comentarios `--` / `/* */`
+    al inicio. Así un SELECT con comentario previo no se clasifica mal como mutación
+    (SQLite devuelve rowcount -1 en SELECT y la UI mostraba "Filas afectadas: -1").
+    """
+    for raw in stmt.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("--"):
+            continue
+        while line.startswith("/*"):
+            end = line.find("*/")
+            if end == -1:
+                break
+            line = line[end + 2 :].strip()
+        if not line:
+            continue
+        parts = line.split(None, 1)
+        return parts[0].upper() if parts else ""
+    return ""
+
+
 class ProspectRepository:
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path or settings.db_path
@@ -218,6 +242,15 @@ class ProspectRepository:
             ),
         )
 
+    def exists_by_name_and_address(self, name: str, address: str) -> bool:
+        """True si ya hay un lead con la misma clave única (name, address) que en el scrape."""
+        with self._conn() as conn:
+            r = conn.execute(
+                "SELECT 1 FROM prospects WHERE name = ? AND address = ? LIMIT 1",
+                (name, address),
+            ).fetchone()
+            return r is not None
+
     def insert_prospect(self, prospect: Prospect) -> bool:
         try:
             with self._conn() as conn:
@@ -337,8 +370,7 @@ class ProspectRepository:
             if re.search(pat, stmt, re.IGNORECASE):
                 raise ValueError("Esta sentencia no está permitida (ATTACH/DETACH/VACUUM)")
 
-        parts = stmt.split(None, 1)
-        verb = parts[0].upper() if parts else ""
+        verb = _leading_sql_verb(stmt)
         read_only = verb in (
             "SELECT",
             "WITH",

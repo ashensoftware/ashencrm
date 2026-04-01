@@ -101,3 +101,95 @@ def website_plausible_for_business(url: str, business_name: str, min_ratio: floa
             best = max(best, SequenceMatcher(None, name, p).ratio())
 
     return best >= min_ratio
+
+
+# Palabras muy genéricas en fichas de Maps; no deben validar un @ por similitud fuzzy.
+_IG_GENERIC_NAME_TOKENS = frozenset(
+    {
+        "dental",
+        "dentista",
+        "odontologia",
+        "odontologos",
+        "odontologo",
+        "clinica",
+        "medellin",
+        "bogota",
+        "cali",
+        "cirugia",
+        "estetica",
+        "barberia",
+        "restaurante",
+        "cafeteria",
+        "cafe",
+        "mejor",
+        "oficial",
+        "tienda",
+        "servicios",
+    }
+)
+
+
+def instagram_handle_plausible_for_business(
+    handle: str,
+    business_name: str,
+    website: str = "",
+    min_ratio_full: float = 0.43,
+    min_ratio_token: float = 0.52,
+) -> bool:
+    """
+    Evita guardar @ de otro negocio (relacionados en Maps, primer link genérico).
+    Si hay sitio web, el handle debe alinearse con el dominio o con el nombre.
+    """
+    if not handle or not str(handle).strip():
+        return False
+    h = re.sub(r"[^a-z0-9]", "", handle.strip().lstrip("@").lower())
+    if len(h) < 2:
+        return True
+
+    name_n = _normalize_name(business_name)
+    if len(name_n) < 5:
+        return True
+
+    if h in name_n or name_n in h:
+        return True
+
+    best_full = SequenceMatcher(None, name_n, h).ratio()
+    best_token = 0.0
+    for raw in re.findall(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{4,}", business_name):
+        t = _normalize_name(raw)
+        if len(t) >= 4:
+            if t in _IG_GENERIC_NAME_TOKENS:
+                continue
+            if t in h or h in t:
+                return True
+            tr = SequenceMatcher(None, t, h).ratio()
+            if tr >= min_ratio_token:
+                best_token = max(best_token, tr)
+
+    slug = ""
+    if website and website.strip():
+        try:
+            host = (urlparse(website.strip()).netloc or "").lower()
+            parts = [
+                re.sub(r"[^a-z0-9]", "", p)
+                for p in host.split(".")
+                if p not in ("www", "com", "co", "org", "net", "site", "app") and len(p) > 2
+            ]
+            if parts:
+                slug = max(parts, key=len)
+        except Exception:
+            slug = ""
+
+    if slug and len(slug) >= 6:
+        r_dom = SequenceMatcher(None, slug, h).ratio()
+        if slug in h or h in slug:
+            return True
+        # Umbral alto: ~0.42 ratio suele ser coincidencia (p. ej. otro negocio del sector)
+        if r_dom >= 0.52:
+            return True
+        # Hay web oficial pero el @ no encaja con el dominio → solo si el nombre respalda
+        return best_token >= min_ratio_token or best_full >= min_ratio_full
+
+    if best_token >= min_ratio_token:
+        return True
+    return best_full >= min_ratio_full

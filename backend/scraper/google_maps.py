@@ -7,6 +7,7 @@ import re
 from typing import List, Optional
 from playwright.async_api import async_playwright, Page
 from backend.domain.prospect import Prospect, ProspectStatus
+from backend.scraper.maps_website import extract_official_website_from_maps_page
 
 if platform.system() == "Windows":
     try:
@@ -150,6 +151,9 @@ class GoogleMapsScraper:
                     rating = 0.0
                     reviews_count = 0
                     website = ""
+                    # No extraer URL desde el texto de la tarjeta: suele mezclar anuncios,
+                    # texto de fotos u otros negocios. La web solo desde el panel de detalle
+                    # (botón "Sitio web") — ver extract_official_website_from_maps_page.
 
                     m_rating = re.search(r"([0-5](?:[.,][0-9])?)", card_text)
                     if m_rating:
@@ -176,28 +180,6 @@ class GoogleMapsScraper:
                         if m_reviews_paren:
                             raw = m_reviews_paren.group(1)
                             reviews_count = int(re.sub(r"\D", "", raw) or 0)
-
-                    urls = re.findall(r"https?://[^\s\)\]]+", card_text)
-                    for u in urls:
-                        u_l = u.lower()
-                        if "google.com/maps" in u_l:
-                            continue
-                        if "instagram.com" in u_l:
-                            continue
-                        if "facebook.com" in u_l:
-                            continue
-                        if "duckduckgo.com" in u_l:
-                            continue
-                        website = u
-                        break
-
-                    if not website:
-                        m_www = re.search(
-                            r"\\b(www\\.[A-Za-z0-9\\.-]+\\.[A-Za-z]{2,}(?:/[^\\s\\)\\]]*)?)",
-                            card_text,
-                        )
-                        if m_www:
-                            website = "https://" + m_www.group(1).rstrip(".")
 
                     phone = ""
                     address = city
@@ -242,27 +224,28 @@ class GoogleMapsScraper:
                             except Exception:
                                 pass
 
-                            # --- Extract links: website AND instagram ---
-                            detail_links = await self.page.query_selector_all(
-                                'a[data-item-id*="authority"], a[aria-label*="Sitio web"], a[aria-label*="Website"], a[href*="instagram.com"], a[href^="http"]'
+                            # --- Sitio web: solo botón oficial del panel (no primer http de la página) ---
+                            detail_website = await extract_official_website_from_maps_page(
+                                self.page
                             )
-                            for lnk in detail_links:
-                                href = await lnk.get_attribute("href")
-                                if not href:
-                                    continue
-                                href_l = href.lower()
-                                if "google.com" in href_l:
-                                    continue
-                                if "duckduckgo.com" in href_l:
-                                    continue
-                                # Capture instagram
-                                if "instagram.com" in href_l and not detail_instagram:
-                                    detail_instagram = href
-                                    continue
-                                if "facebook.com" in href_l:
-                                    continue
-                                if re.search(r"\.[a-z]{2,}(/|$)", href_l) and not detail_website:
-                                    detail_website = href.rstrip(".")
+
+                            # --- Instagram: solo enlaces explícitos a instagram.com ---
+                            try:
+                                ig_links = await self.page.query_selector_all(
+                                    'a[href*="instagram.com"]'
+                                )
+                                for lnk in ig_links:
+                                    href = await lnk.get_attribute("href")
+                                    if not href:
+                                        continue
+                                    href_l = href.lower()
+                                    if "/p/" in href_l or "/reels/" in href_l:
+                                        continue
+                                    if "instagram.com" in href_l and not detail_instagram:
+                                        detail_instagram = href
+                                        break
+                            except Exception:
+                                pass
 
                             # --- Extract phone from detail with ARIA label ---
                             try:

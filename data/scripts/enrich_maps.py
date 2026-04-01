@@ -22,7 +22,9 @@ sys.path.append(str(Path(__file__).parent.parent))
 from playwright.async_api import async_playwright
 
 from backend.config.settings import settings
+from backend.core.maps_website import website_plausible_for_business
 from backend.database.db import Database
+from backend.scraper.maps_website import extract_official_website_from_maps_page
 from backend.scraper.models import Prospect
 
 
@@ -31,32 +33,12 @@ def normalize_external_url(url: str) -> str:
 
 
 async def pick_website_from_page(page) -> Optional[str]:
-
-    links = await page.query_selector_all('a[href^="http"]')
-    for link in links:
-        try:
-            href = await link.get_attribute("href")
-        except Exception:
-            href = None
-        if not href:
-            continue
-
-        u_l = href.lower()
-        if "google.com" in u_l:
-            continue
-        if "instagram.com" in u_l:
-            continue
-        if "facebook.com" in u_l:
-            continue
-        if "whatsapp.com" in u_l:
-            continue
-        if "youtu" in u_l:
-            continue
-
-        if re.search(r"\\.[a-z]{2,}(/|$)", u_l):
-            return normalize_external_url(href)
-
-    return None
+    """
+    Solo el botón oficial «Sitio web» en la ficha. El antiguo `a[href^=http]`
+    cogía el primer enlace de la página (a menudo otro negocio o agregador).
+    """
+    raw = await extract_official_website_from_maps_page(page)
+    return normalize_external_url(raw) if raw else None
 
 
 def parse_rating_and_reviews(html: str) -> tuple[float, int]:
@@ -117,7 +99,7 @@ async def enrich_one(page, db: Database, p: Prospect) -> None:
     website = await pick_website_from_page(page)
 
     patch = {}
-    if website and not p.website:
+    if website and not p.website and website_plausible_for_business(website, p.name):
         patch["website"] = website
     if reviews_count and (not p.reviews_count or p.reviews_count == 0):
         patch["reviews_count"] = reviews_count

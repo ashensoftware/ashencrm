@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 sys.path.append(str(Path(__file__).parent.parent))
 
 from backend.config.settings import settings
+from backend.core.maps_website import website_plausible_for_business
 from backend.database.db import Database
 from backend.scraper.models import Prospect
 
@@ -120,7 +121,7 @@ def enrich_prospect_external(p: Prospect) -> dict:
 
     if not p.website:
         website = choose_website(links)
-        if website:
+        if website and website_plausible_for_business(website, p.name):
             patch["website"] = website
 
     if not p.ig_email:

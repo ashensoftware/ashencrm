@@ -60,9 +60,10 @@ function ProspectCard({ prospect, onSelect, onWhatsApp, onDragStart }: {
 
 export function KanbanPage({ prospects, onSelectProspect, onWhatsApp, onChangeStatus }: Props) {
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
-  const [lostModal, setLostModal] = useState<null | "discarded" | "client">(null);
+  const [lostModal, setLostModal] = useState<null | "discarded" | "client" | "has_website">(null);
   const discardedProspects = prospects.filter((p) => p.status === "rejected");
   const clientRejectedProspects = prospects.filter((p) => p.status === "client_rejected");
+  const hasWebsiteProspects = prospects.filter((p) => p.status === "has_website");
 
   const handleDragStart = useCallback((e: React.DragEvent, prospectName: string) => {
     e.dataTransfer.setData("text/plain", prospectName);
@@ -90,6 +91,9 @@ export function KanbanPage({ prospects, onSelectProspect, onWhatsApp, onChangeSt
             </button>
             <button type="button" className="btn-secondary" onClick={() => setLostModal("client")}>
               Nos rechazó el cliente ({clientRejectedProspects.length})
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => setLostModal("has_website")}>
+              Ya tienen web ({hasWebsiteProspects.length})
             </button>
           </div>
         </div>
@@ -134,7 +138,9 @@ export function KanbanPage({ prospects, onSelectProspect, onWhatsApp, onChangeSt
               <h2>
                 {lostModal === "discarded"
                   ? "Descartados por el equipo"
-                  : "Nos rechazó el cliente"}
+                  : lostModal === "client"
+                    ? "Nos rechazó el cliente"
+                    : "Ya tienen página web"}
               </h2>
               <button type="button" className="close-btn" onClick={() => setLostModal(null)} aria-label="Cerrar">
                 ×
@@ -143,9 +149,17 @@ export function KanbanPage({ prospects, onSelectProspect, onWhatsApp, onChangeSt
             <p style={{ margin: "0 0 0.75rem", fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
               {lostModal === "discarded"
                 ? "Leads que archivaste sin seguir (p. ej. desde la revisión inicial). No implica que hayan visto una propuesta comercial."
-                : "Hubo contacto y propuesta; el negocio dijo que no. Distinto de un descarte interno."}
+                : lostModal === "client"
+                  ? "Hubo contacto y propuesta; el negocio dijo que no. Distinto de un descarte interno."
+                  : "Marcados al revisar el lead: ya tenían sitio propio. Quedan aparte del pipeline activo para abordarlos cuando convenga."}
             </p>
-            {(lostModal === "discarded" ? discardedProspects : clientRejectedProspects).length === 0 ? (
+            {(
+              lostModal === "discarded"
+                ? discardedProspects
+                : lostModal === "client"
+                  ? clientRejectedProspects
+                  : hasWebsiteProspects
+            ).length === 0 ? (
               <div className="empty-state" style={{ padding: "1rem 0 0.25rem" }}>
                 No hay registros en esta lista.
               </div>
@@ -159,11 +173,21 @@ export function KanbanPage({ prospects, onSelectProspect, onWhatsApp, onChangeSt
                   paddingRight: "0.25rem",
                 }}
               >
-                {(lostModal === "discarded" ? discardedProspects : clientRejectedProspects).map((p) => (
-                  <div key={p.name} className="todo-card" style={{ cursor: "default" }}>
+                {(
+                  lostModal === "discarded"
+                    ? discardedProspects
+                    : lostModal === "client"
+                      ? clientRejectedProspects
+                      : hasWebsiteProspects
+                ).map((p, idx) => (
+                  <div
+                    key={p.id ?? `${p.name}-${idx}`}
+                    className="todo-card"
+                    style={{ cursor: "default" }}
+                  >
                     <div className="todo-card-header">
                       <div className="todo-card-avatar">
-                        <X size={16} />
+                        {lostModal === "has_website" ? <Globe size={16} /> : <X size={16} />}
                       </div>
                       <span className="todo-card-title">{p.name}</span>
                       {p.lead_score != null && <span className="todo-card-score">{p.lead_score}</span>}

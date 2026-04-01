@@ -35,6 +35,17 @@ def test_exists_by_name_and_address(repo):
     assert repo.exists_by_name_and_address("Dup Check", "Otra") is False
 
 
+def test_delete_prospect_by_id(repo):
+    p = Prospect(name="To Delete", category="cafe", address="X")
+    assert repo.insert_prospect(p) is True
+    rows = repo.get_prospects()
+    pid = rows[0].id
+    assert pid is not None
+    assert repo.delete_prospect_by_id(pid) is True
+    assert repo.delete_prospect_by_id(pid) is False
+    assert len(repo.get_prospects()) == 0
+
+
 def test_update_status(repo):
     p = Prospect(name="Test Update", category="otros", address="123")
     repo.insert_prospect(p)

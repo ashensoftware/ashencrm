@@ -1,4 +1,5 @@
 import { useMemo, lazy, Suspense } from "react";
+import type { Prospect } from "./types";
 import { Routes, Route, useNavigate, useLocation, Navigate, Link } from "react-router-dom";
 import { Sidebar } from "./organisms/Sidebar";
 import { ClientsSidebar } from "./organisms/ClientsSidebar";
@@ -10,7 +11,7 @@ import { LandingPage } from "./pages/LandingPage";
 import { useProspects } from "./hooks/useProspects";
 import { useAppActions } from "./hooks/useAppActions";
 import { useAppSettings } from "./hooks/useAppSettings";
-import { updateProspect, sendWhatsApp } from "./api";
+import { updateProspect, sendWhatsApp, deleteProspectById } from "./api";
 import { MSG, LABELS } from "./constants";
 
 const MapView = lazy(() => import("./organisms/MapView").then((m) => ({ default: m.MapView })));
@@ -64,6 +65,31 @@ function App() {
   const { settings: appSettings, reload: reloadAppSettings } = useAppSettings();
   const actions = useAppActions(refresh, refreshCatalog, catalog, appSettings);
   const { modals, scanner, selectedProspect, setSelectedProspect } = actions;
+
+  const handleDeleteProspect = async (p: Prospect) => {
+    if (p.id == null) {
+      window.alert("No se puede eliminar: falta el ID. Recarga la página.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `¿Eliminar "${p.name}" de la base? Esta acción no se puede deshacer.`,
+      )
+    ) {
+      return;
+    }
+    const res = await deleteProspectById(p.id);
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { detail?: string };
+      window.alert(err.detail ?? "Error al eliminar");
+      return;
+    }
+    if (selectedProspect?.id === p.id) {
+      modals.setModal(null);
+      setSelectedProspect(null);
+    }
+    await refresh();
+  };
 
   return (
     <div className="app-container">
@@ -192,6 +218,7 @@ function App() {
                     setSelectedProspect(p);
                     modals.setModal("detail");
                   }}
+                  onDeleteProspect={handleDeleteProspect}
                 />
               }
             />

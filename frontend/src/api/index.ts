@@ -74,6 +74,10 @@ export async function createProspect(data: Partial<Prospect>) {
   });
 }
 
+export async function deleteProspectById(prospectId: number): Promise<Response> {
+  return request(`/prospects/${prospectId}`, { method: "DELETE" });
+}
+
 export async function fetchRandomProspect(status = "scraped"): Promise<Prospect | { message: string }> {
   try {
     const res = await request(`/prospects/random?status=${status}`);

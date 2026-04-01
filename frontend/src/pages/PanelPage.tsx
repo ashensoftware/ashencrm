@@ -3,7 +3,7 @@ import { useDebounce } from "../hooks/useDebounce";
 import type { Prospect, ProspectFilters, CatalogItem } from "../types";
 import { STATUS_OPTIONS, IG_OPTIONS, CONTACT_OPTIONS } from "../constants";
 import { getScreenshotUrl } from "../api";
-import { Plus, Edit2, ChevronLeft, ChevronRight, Building2 } from "lucide-react";
+import { Plus, Edit2, ChevronLeft, ChevronRight, Building2, Trash2 } from "lucide-react";
 
 function ProspectListAvatar({ prospect }: { prospect: Prospect }) {
   const [failed, setFailed] = useState(false);
@@ -59,9 +59,18 @@ interface Props {
   onFiltersChange: (f: ProspectFilters) => void;
   onAddProspect: () => void;
   onSelectProspect: (p: Prospect) => void;
+  onDeleteProspect?: (p: Prospect) => void | Promise<void>;
 }
 
-export function PanelPage({ prospects, filters, catalog, onFiltersChange, onAddProspect, onSelectProspect }: Props) {
+export function PanelPage({
+  prospects,
+  filters,
+  catalog,
+  onFiltersChange,
+  onAddProspect,
+  onSelectProspect,
+  onDeleteProspect,
+}: Props) {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
   
@@ -151,7 +160,11 @@ export function PanelPage({ prospects, filters, catalog, onFiltersChange, onAddP
               <tr><td colSpan={5} style={{ padding: "3rem", textAlign: "center", color: "var(--text-secondary)" }}>No hay clientes que coincidan con los filtros.</td></tr>
             ) : (
               paginatedProspects.map((p) => (
-                <tr key={p.name} style={{ borderBottom: "1px solid var(--border)", transition: "background 0.2s" }} className="table-row-hover">
+                <tr
+                  key={p.id ?? `${p.name}::${p.address ?? ""}`}
+                  style={{ borderBottom: "1px solid var(--border)", transition: "background 0.2s" }}
+                  className="table-row-hover"
+                >
                   <td style={{ padding: "1rem 1.5rem", maxWidth: "300px", whiteSpace: "normal", wordBreak: "break-word" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                       <ProspectListAvatar key={`${p.name}-${p.screenshot_path ?? ""}`} prospect={p} />
@@ -172,10 +185,37 @@ export function PanelPage({ prospects, filters, catalog, onFiltersChange, onAddP
                   <td style={{ padding: "1rem" }}>
                     <span className={`p-status-tag ${p.status}`}>{STATUS_OPTIONS.find(o => o.value === p.status)?.label || p.status}</span>
                   </td>
-                  <td style={{ padding: "1rem 1.5rem", textAlign: "right" }}>
-                    <button className="btn-secondary" style={{ padding: "0.5rem" }} onClick={() => onSelectProspect(p)} title="Ver/Editar Detalles">
-                      <Edit2 size={16} /> Detalle
-                    </button>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "right", whiteSpace: "nowrap" }}>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", justifyContent: "flex-end" }}>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ padding: "0.5rem" }}
+                        onClick={() => onSelectProspect(p)}
+                        title="Ver/Editar Detalles"
+                      >
+                        <Edit2 size={16} /> Detalle
+                      </button>
+                      {onDeleteProspect && (
+                        <button
+                          type="button"
+                          className="btn-danger"
+                          style={{
+                            padding: "0.5rem 0.65rem",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.35rem",
+                            flex: "none",
+                            fontSize: "0.85rem",
+                          }}
+                          title="Eliminar de la base"
+                          onClick={() => void onDeleteProspect(p)}
+                        >
+                          <Trash2 size={16} aria-hidden />
+                          Borrar
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))

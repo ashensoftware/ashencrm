@@ -80,7 +80,7 @@ export function ProspectDetailModal({
   onNext,
   onPrev,
   hasPrev,
-  inline
+  inline,
 }: Props) {
   const [prospect, setProspect] = useState<Prospect>(initialProspect);
   // screenshot_path can be a full URL (Google/IG) or a local path

@@ -51,6 +51,19 @@ def create_prospects_router(db):
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
+    @router.delete("/prospects/{prospect_id}")
+    async def delete_prospect(prospect_id: int):
+        try:
+            if prospect_id < 1:
+                raise HTTPException(status_code=400, detail="ID inválido")
+            if not db.delete_prospect_by_id(prospect_id):
+                raise HTTPException(status_code=404, detail="Prospecto no encontrado")
+            return {"message": "Prospecto eliminado"}
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
     @router.post("/prospects")
     async def create_manual_prospect(data: dict):
         try:

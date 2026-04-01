@@ -251,6 +251,13 @@ class ProspectRepository:
             ).fetchone()
             return r is not None
 
+    def delete_prospect_by_id(self, prospect_id: int) -> bool:
+        """Elimina el lead. clients.prospect_id queda NULL por ON DELETE SET NULL."""
+        with self._conn() as conn:
+            cur = conn.execute("DELETE FROM prospects WHERE id = ?", (prospect_id,))
+            conn.commit()
+            return cur.rowcount > 0
+
     def insert_prospect(self, prospect: Prospect) -> bool:
         try:
             with self._conn() as conn:

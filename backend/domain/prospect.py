@@ -20,7 +20,8 @@ class ProspectStatus(str, Enum):
     CLIENT_WON = "client_won"
     RESPONDED = "responded"
     SKIPPED = "skipped"
-    REJECTED = "rejected"
+    REJECTED = "rejected"  # Descartado por el equipo (p. ej. desde scraped / Tinder)
+    CLIENT_REJECTED = "client_rejected"  # Propuesta enviada; el negocio no aceptó
 
 
 @dataclass

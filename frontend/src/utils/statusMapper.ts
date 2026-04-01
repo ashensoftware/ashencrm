@@ -7,7 +7,8 @@ const STATUS_MAP: Record<string, StatusInfo> = {
   prompt_gpt: { label: "PROMPT GPT", class: "prompt_gpt" },
   demo_created: { label: "DEMO COMPLETA", class: "demo_created" },
   has_website: { label: "CON WEB", class: "has_website" },
-  rejected: { label: "RECHAZADO", class: "rejected" },
+  rejected: { label: "DESCARTADO", class: "rejected" },
+  client_rejected: { label: "PERDIDO (CLIENTE)", class: "client_rejected" },
   contacted: { label: "CONTACTADO", class: "contacted" },
   client_won: { label: "CLIENTE", class: "client_won" },
 };
@@ -31,6 +32,7 @@ const STATUS_COLORS: Record<string, string> = {
   contacted: "#2ea043",
   client_won: "#10b981",
   rejected: "#64748b",
+  client_rejected: "#b45309",
 };
 
 export function mapStatusToColor(status?: string): string {
@@ -45,7 +47,8 @@ const STATUS_LABELS: Record<string, string> = {
   has_website: "Con Web",
   contacted: "Contactado",
   client_won: "Cliente Obtenido",
-  rejected: "Rechazado",
+  rejected: "Descartado (equipo)",
+  client_rejected: "Nos rechazó el cliente",
 };
 
 export function mapStatusToLabel(status?: string): string {

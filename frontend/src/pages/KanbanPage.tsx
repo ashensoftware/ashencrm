@@ -60,8 +60,9 @@ function ProspectCard({ prospect, onSelect, onWhatsApp, onDragStart }: {
 
 export function KanbanPage({ prospects, onSelectProspect, onWhatsApp, onChangeStatus }: Props) {
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
-  const [showRejectedModal, setShowRejectedModal] = useState(false);
-  const rejectedProspects = prospects.filter((p) => p.status === "rejected");
+  const [lostModal, setLostModal] = useState<null | "discarded" | "client">(null);
+  const discardedProspects = prospects.filter((p) => p.status === "rejected");
+  const clientRejectedProspects = prospects.filter((p) => p.status === "client_rejected");
 
   const handleDragStart = useCallback((e: React.DragEvent, prospectName: string) => {
     e.dataTransfer.setData("text/plain", prospectName);
@@ -83,9 +84,14 @@ export function KanbanPage({ prospects, onSelectProspect, onWhatsApp, onChangeSt
             <h2>Pipeline de Prospectos</h2>
             <p>Seguimiento de leads en progreso — arrastra tarjetas entre columnas</p>
           </div>
-          <button className="btn-secondary" onClick={() => setShowRejectedModal(true)}>
-            Ver rechazados ({rejectedProspects.length})
-          </button>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            <button type="button" className="btn-secondary" onClick={() => setLostModal("discarded")}>
+              Descartados (equipo) ({discardedProspects.length})
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => setLostModal("client")}>
+              Nos rechazó el cliente ({clientRejectedProspects.length})
+            </button>
+          </div>
         </div>
       </header>
       <div className="todo-columns">
@@ -121,20 +127,39 @@ export function KanbanPage({ prospects, onSelectProspect, onWhatsApp, onChangeSt
         })}
       </div>
 
-      {showRejectedModal && (
-        <div className="modal" onClick={(e) => e.target === e.currentTarget && setShowRejectedModal(false)}>
+      {lostModal && (
+        <div className="modal" onClick={(e) => e.target === e.currentTarget && setLostModal(null)}>
           <div className="modal-content" style={{ width: "760px", maxHeight: "88vh" }}>
             <header>
-              <h2>Prospectos rechazados</h2>
-              <button className="close-btn" onClick={() => setShowRejectedModal(false)} aria-label="Cerrar">×</button>
+              <h2>
+                {lostModal === "discarded"
+                  ? "Descartados por el equipo"
+                  : "Nos rechazó el cliente"}
+              </h2>
+              <button type="button" className="close-btn" onClick={() => setLostModal(null)} aria-label="Cerrar">
+                ×
+              </button>
             </header>
-            {rejectedProspects.length === 0 ? (
+            <p style={{ margin: "0 0 0.75rem", fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+              {lostModal === "discarded"
+                ? "Leads que archivaste sin seguir (p. ej. desde la revisión inicial). No implica que hayan visto una propuesta comercial."
+                : "Hubo contacto y propuesta; el negocio dijo que no. Distinto de un descarte interno."}
+            </p>
+            {(lostModal === "discarded" ? discardedProspects : clientRejectedProspects).length === 0 ? (
               <div className="empty-state" style={{ padding: "1rem 0 0.25rem" }}>
-                No hay prospectos rechazados por ahora.
+                No hay registros en esta lista.
               </div>
             ) : (
-              <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.6rem", paddingRight: "0.25rem" }}>
-                {rejectedProspects.map((p) => (
+              <div
+                style={{
+                  overflowY: "auto",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.6rem",
+                  paddingRight: "0.25rem",
+                }}
+              >
+                {(lostModal === "discarded" ? discardedProspects : clientRejectedProspects).map((p) => (
                   <div key={p.name} className="todo-card" style={{ cursor: "default" }}>
                     <div className="todo-card-header">
                       <div className="todo-card-avatar">
@@ -147,7 +172,7 @@ export function KanbanPage({ prospects, onSelectProspect, onWhatsApp, onChangeSt
                       {p.category && <span className="todo-card-category">{p.category}</span>}
                     </div>
                     <div className="todo-card-actions">
-                      <button className="todo-action-btn" onClick={() => onSelectProspect(p)} title="Ver detalle">
+                      <button type="button" className="todo-action-btn" onClick={() => onSelectProspect(p)} title="Ver detalle">
                         <Eye size={14} />
                       </button>
                     </div>

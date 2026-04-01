@@ -174,7 +174,9 @@ export function ProspectDetailModal({
     hasGptPrompt &&
     status !== "scraped" &&
     status !== "ready" &&
-    status !== "waiting";
+    status !== "waiting" &&
+    status !== "rejected" &&
+    status !== "client_rejected";
 
   const performUpdate = async (data: Partial<Prospect>) => {
     setLoading(true);
@@ -593,8 +595,10 @@ export function ProspectDetailModal({
                     onClick={() => onReject ? onReject() : performUpdate({ status: 'rejected' })} 
                     style={{ padding: '1.5rem', fontSize: '1.25rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}
                     disabled={loading}
+                    title="No seguiremos con este lead (no es el cliente quien rechaza)"
                   >
-                    <X size={32} /> Rechazar
+                    <X size={32} /> Descartar
+                    <span style={{ fontSize: "0.75rem", opacity: 0.9, fontWeight: 500 }}>No nos interesa / no califica</span>
                   </button>
                   <button 
                     className="btn-primary" 
@@ -810,9 +814,10 @@ export function ProspectDetailModal({
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <button
                     className="btn-danger"
-                    onClick={() => performUpdate({ status: 'rejected' })}
+                    onClick={() => performUpdate({ status: 'client_rejected' })}
                     style={{ padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                     disabled={loading}
+                    title="El negocio dijo que no a nuestra propuesta"
                   >
                     <X size={18} /> No aceptó propuesta
                   </button>
@@ -839,8 +844,20 @@ export function ProspectDetailModal({
             {status === "rejected" && (
               <div style={{ textAlign: 'center', padding: '1rem' }}>
                 <X size={48} color="#64748b" style={{ marginBottom: '1rem' }} />
-                <h3>Prospecto Rechazado</h3>
-                <p style={{ color: 'var(--text-muted)' }}>El negocio no aceptó la propuesta en este momento.</p>
+                <h3>Descartado por el equipo</h3>
+                <p style={{ color: 'var(--text-muted)' }}>
+                  Este lead se archivó sin contacto comercial (no califica, duplicado, etc.). No implica que el cliente haya dicho no a una propuesta.
+                </p>
+              </div>
+            )}
+
+            {status === "client_rejected" && (
+              <div style={{ textAlign: 'center', padding: '1rem' }}>
+                <X size={48} color="#b45309" style={{ marginBottom: '1rem' }} />
+                <h3>Nos rechazó el cliente</h3>
+                <p style={{ color: 'var(--text-muted)' }}>
+                  Hubo contacto y propuesta; el negocio no aceptó en este momento. Es distinto de un descarte interno antes de vender.
+                </p>
               </div>
             )}
 

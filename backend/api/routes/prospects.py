@@ -201,6 +201,7 @@ def create_prospects_router(db):
                     processed_states = [
                         ProspectStatus.CONTACTED.value,
                         ProspectStatus.REJECTED.value,
+                        ProspectStatus.CLIENT_REJECTED.value,
                         ProspectStatus.SKIPPED.value,
                         ProspectStatus.RESPONDED.value,
                     ]

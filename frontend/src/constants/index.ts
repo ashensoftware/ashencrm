@@ -99,7 +99,8 @@ export const STATUS_OPTIONS = [
   { value: "ready", label: "Potenciales" },
   { value: "demo_created", label: "Demo Creada" },
   { value: "has_website", label: "Ya tienen Web" },
-  { value: "rejected", label: "Rechazados" },
+  { value: "rejected", label: "Descartados (equipo)" },
+  { value: "client_rejected", label: "Nos rechazó el cliente" },
   { value: "contacted", label: "Contactados" },
 ] as const;
 

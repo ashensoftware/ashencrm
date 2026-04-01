@@ -3,7 +3,54 @@ import { useDebounce } from "../hooks/useDebounce";
 import type { Prospect, ProspectFilters, CatalogItem } from "../types";
 import { STATUS_OPTIONS, IG_OPTIONS, CONTACT_OPTIONS } from "../constants";
 import { getScreenshotUrl } from "../api";
-import { Plus, Edit2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Edit2, ChevronLeft, ChevronRight, Building2 } from "lucide-react";
+
+function ProspectListAvatar({ prospect }: { prospect: Prospect }) {
+  const [failed, setFailed] = useState(false);
+  const imgUrl = prospect.screenshot_path?.startsWith("http")
+    ? prospect.screenshot_path
+    : getScreenshotUrl(prospect.screenshot_path);
+  const tryImg = Boolean(imgUrl) && !failed;
+
+  const placeholder = (
+    <div
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: "8px",
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        border: "1px solid var(--border)",
+        background: "rgba(255,255,255,0.06)",
+        color: "var(--text-muted)",
+      }}
+      title="Sin foto del negocio"
+    >
+      <Building2 size={18} strokeWidth={2} aria-hidden />
+    </div>
+  );
+
+  if (!tryImg) return placeholder;
+
+  return (
+    <img
+      src={imgUrl!}
+      alt=""
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: "8px",
+        objectFit: "cover",
+        flexShrink: 0,
+        border: "1px solid var(--border)",
+        background: "var(--bg-elevated)",
+      }}
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 interface Props {
   prospects: Prospect[];
@@ -107,46 +154,7 @@ export function PanelPage({ prospects, filters, catalog, onFiltersChange, onAddP
                 <tr key={p.name} style={{ borderBottom: "1px solid var(--border)", transition: "background 0.2s" }} className="table-row-hover">
                   <td style={{ padding: "1rem 1.5rem", maxWidth: "300px", whiteSpace: "normal", wordBreak: "break-word" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                      {(() => {
-                        const imgUrl = p.screenshot_path?.startsWith("http") ? p.screenshot_path : getScreenshotUrl(p.screenshot_path);
-                        return imgUrl ? (
-                          <img
-                            src={imgUrl}
-                            alt=""
-                            style={{
-                              width: 36,
-                              height: 36,
-                              borderRadius: "8px",
-                              objectFit: "cover",
-                              flexShrink: 0,
-                              border: "1px solid var(--border)",
-                              background: "var(--bg-elevated)",
-                            }}
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = "none";
-                              (e.target as HTMLImageElement).nextElementSibling?.removeAttribute("style");
-                            }}
-                          />
-                        ) : null;
-                      })()}
-                      <div
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: "8px",
-                          flexShrink: 0,
-                          display: (p.screenshot_path ? "none" : "flex"),
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: "0.85rem",
-                          fontWeight: 700,
-                          background: "linear-gradient(135deg, var(--accent), var(--accent-hover))",
-                          color: "white",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        {p.name.charAt(0)}
-                      </div>
+                      <ProspectListAvatar key={`${p.name}-${p.screenshot_path ?? ""}`} prospect={p} />
                       <div>
                         <div style={{ fontWeight: 600, color: "white" }}>{p.name}</div>
                         {p.city && <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>{p.city}</div>}

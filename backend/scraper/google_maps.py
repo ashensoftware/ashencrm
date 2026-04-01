@@ -7,6 +7,7 @@ import re
 from typing import List, Optional
 from playwright.async_api import async_playwright, Page
 from backend.domain.prospect import Prospect, ProspectStatus
+from backend.scraper.maps_instagram import extract_instagram_from_place_panel
 from backend.scraper.maps_website import extract_official_website_from_maps_page
 
 if platform.system() == "Windows":
@@ -101,6 +102,8 @@ class GoogleMapsScraper:
         prospects = []
 
         seen_keys = set()
+        # Misma URL de portada en varios negocios = casi siempre error (stock/relacionados); solo la primera cuenta
+        seen_cover_urls: set[str] = set()
 
         scroll_attempts = 0
         max_scroll_attempts = 50
@@ -227,21 +230,13 @@ class GoogleMapsScraper:
                                 self.page
                             )
 
-                            # --- Instagram: solo enlaces explícitos a instagram.com ---
+                            # --- Instagram: solo dentro del panel del lugar (no primer link global) ---
                             try:
-                                ig_links = await self.page.query_selector_all(
-                                    'a[href*="instagram.com"]'
+                                ig_official = await extract_instagram_from_place_panel(
+                                    self.page
                                 )
-                                for lnk in ig_links:
-                                    href = await lnk.get_attribute("href")
-                                    if not href:
-                                        continue
-                                    href_l = href.lower()
-                                    if "/p/" in href_l or "/reels/" in href_l:
-                                        continue
-                                    if "instagram.com" in href_l and not detail_instagram:
-                                        detail_instagram = href
-                                        break
+                                if ig_official:
+                                    detail_instagram = ig_official
                             except Exception:
                                 pass
 
@@ -297,22 +292,13 @@ class GoogleMapsScraper:
                         if ig_match:
                             instagram_handle = ig_match.group(1)
 
-                        # Try to fetch IG profile pic (prioritize over Maps photo)
-                        try:
-                            ig_page = await self.context.new_page()
-                            await ig_page.goto(instagram_url, timeout=10000)
-                            await asyncio.sleep(1.5)
-                            og_img = await ig_page.query_selector('meta[property="og:image"]')
-                            if og_img:
-                                ig_pic = await og_img.get_attribute("content")
-                                if ig_pic:
-                                    detail_photo = ig_pic  # Override maps photo
-                            await ig_page.close()
-                        except Exception:
-                            try:
-                                await ig_page.close()
-                            except Exception:
-                                pass
+                    # No sustituir la foto de Maps por og:image de Instagram: el link a IG a menudo
+                    # es de otro negocio o genérico y copia la misma imagen a muchos leads.
+
+                    if detail_photo and detail_photo in seen_cover_urls:
+                        detail_photo = ""
+                    elif detail_photo:
+                        seen_cover_urls.add(detail_photo)
 
                     is_all = category == "*"
 
@@ -385,12 +371,24 @@ class GoogleMapsScraper:
 
         return 0.0, 0.0
 
+    @staticmethod
+    def _cover_url_looks_usable(url: str, min_edge: int = 160) -> bool:
+        """Evita miniaturas de icono; URLs googleusercontent suelen traer =wXXX-hYYY."""
+        if not url or not url.strip():
+            return False
+        low = url.lower()
+        if "googleusercontent" in low or "ggpht.com" in low:
+            m = re.search(r"=w(\d+)-h(\d+)", url)
+            if m:
+                w, h = int(m.group(1)), int(m.group(2))
+                if max(w, h) < min_edge:
+                    return False
+        return True
+
     async def _extract_place_photo_from_maps_page(self) -> str:
         """
-        Imagen de portada del negocio en el panel de detalle.
-
-        No usar un selector global `img[src*=googleusercontent]`: el primero en el DOM
-        suele ser el avatar de la cuenta de Google en la barra superior, no la foto del lugar.
+        Portada del lugar: solo imágenes visibles del hero del panel (no el primer nodo del DOM,
+        que puede ser una tarjeta oculta o duplicada).
         """
         page = self.page
         try:
@@ -400,28 +398,29 @@ class GoogleMapsScraper:
             )
         except Exception:
             pass
-        selectors = [
-            'button[jsaction*="pane.heroHeaderImage"] img',
-            'button[jsaction*="heroHeaderImage"] img',
-        ]
-        for sel in selectors:
-            try:
-                photo_el = await page.query_selector(sel)
-                if photo_el:
-                    src = (await photo_el.get_attribute("src")) or ""
-                    if src.strip():
-                        return src.strip()
-            except Exception:
-                continue
-        # Respaldo: img de portada solo dentro del botón/cabecera del panel (no feed ni header)
+        try:
+            imgs = await page.query_selector_all(
+                'button[jsaction*="pane.heroHeaderImage"] img, button[jsaction*="heroHeaderImage"] img'
+            )
+            for img in reversed(imgs):
+                try:
+                    if not await img.is_visible():
+                        continue
+                    src = ((await img.get_attribute("src")) or "").strip()
+                    if src and self._cover_url_looks_usable(src):
+                        return src
+                except Exception:
+                    continue
+        except Exception:
+            pass
         try:
             scoped = await page.query_selector(
                 'div[role="region"]:has(button[jsaction*="pane.heroHeaderImage"]) img.p-img'
             )
-            if scoped:
-                src = (await scoped.get_attribute("src")) or ""
-                if src.strip():
-                    return src.strip()
+            if scoped and await scoped.is_visible():
+                src = ((await scoped.get_attribute("src")) or "").strip()
+                if src and self._cover_url_looks_usable(src):
+                    return src
         except Exception:
             pass
         return ""

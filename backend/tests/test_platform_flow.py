@@ -1,9 +1,8 @@
 """Autorización, cola durable, identidad, Places y Lovable sin red real."""
 
+import json
 import sqlite3
-import tempfile
 import threading
-from pathlib import Path
 
 import httpx
 import pytest
@@ -63,7 +62,10 @@ def test_sensitive_routes_require_a_role(tmp_path, monkeypatch):
     app = create_app(security=_security(), db=repo, platform=platform)
     with TestClient(app) as client:
         assert client.get("/api/livez").status_code == 200
-        assert client.get("/api/auth/config").json()["auth_mode"] == "local"
+        config = client.get("/api/auth/config").json()
+        assert config["auth_mode"] == "local"
+        assert "supabase_secret_key" not in config
+        assert "sb_secret_" not in json.dumps(config)
         assert client.get("/api/prospects").status_code == 401
         assert client.get("/api/prospects", headers=_headers("viewer")).status_code == 200
         assert client.post("/api/scrape-interactive", json={}, headers=_headers("viewer")).status_code == 403

@@ -117,6 +117,18 @@ class Settings:
     platform_secret_key: str = field(default_factory=lambda: os.getenv("PLATFORM_SECRET_KEY", ""))
     google_places_api_key: str = field(default_factory=lambda: os.getenv("GOOGLE_PLACES_API_KEY", ""))
     platform_db_path: Path = PROJECT_ROOT / "data" / "db" / "platform.db"
+    supabase_url: str = field(
+        default_factory=lambda: os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    )
+    supabase_publishable_key: str = field(
+        default_factory=lambda: os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip()
+    )
+    supabase_secret_key: str = field(
+        default_factory=lambda: os.getenv("SUPABASE_SECRET_KEY", "").strip()
+    )
+    supabase_jwks_url: str = field(
+        default_factory=lambda: os.getenv("SUPABASE_JWKS_URL", "").strip()
+    )
 
     def __post_init__(self) -> None:
         from backend.core.security_policy import (
@@ -143,6 +155,18 @@ class Settings:
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         self.exports_dir.mkdir(parents=True, exist_ok=True)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.supabase_url:
+            if not self.oidc_issuer:
+                self.oidc_issuer = f"{self.supabase_url}/auth/v1"
+            if not self.oidc_jwks_url:
+                self.oidc_jwks_url = self.supabase_jwks_url or (
+                    f"{self.supabase_url}/auth/v1/.well-known/jwks.json"
+                )
+            if not self.oidc_audience:
+                self.oidc_audience = "authenticated"
+            explicit_mode = os.getenv("AUTH_MODE", "").strip().lower()
+            if explicit_mode in {"", "local"} and self.supabase_jwks_url:
+                self.auth_mode = "oidc"
 
 
 settings = Settings()

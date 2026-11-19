@@ -97,6 +97,86 @@ def test_jwks_client_retries_transient_failure_then_validates():
     assert token not in json.dumps(document)
 
 
+def test_supabase_app_metadata_role_beats_provider_role():
+    private_key, public_key = _rsa_pair()
+    token = jwt.encode(
+        {
+            "sub": "supabase-admin",
+            "role": "authenticated",
+            "user_metadata": {"role": "viewer"},
+            "app_metadata": {"role": "admin"},
+            "iss": "https://project.supabase.co/auth/v1",
+            "aud": "authenticated",
+            "exp": int(time.time()) + 600,
+        },
+        private_key,
+        algorithm="RS256",
+        headers={"kid": "k1"},
+    )
+    authenticator = TokenAuthenticator(
+        auth_mode="oidc",
+        oidc_issuer="https://project.supabase.co/auth/v1",
+        oidc_audience="authenticated",
+        jwk_provider=StaticKeyProvider(public_key),
+    )
+    principal = authenticator.authenticate(f"Bearer {token}")
+    assert principal.role == "admin"
+    assert "admin:settings" in principal.permissions
+
+
+def test_user_metadata_role_does_not_grant_access():
+    private_key, public_key = _rsa_pair()
+    token = jwt.encode(
+        {
+            "sub": "supabase-user",
+            "role": "authenticated",
+            "user_metadata": {"role": "admin"},
+            "iss": "https://project.supabase.co/auth/v1",
+            "aud": "authenticated",
+            "exp": int(time.time()) + 600,
+        },
+        private_key,
+        algorithm="RS256",
+        headers={"kid": "k1"},
+    )
+    authenticator = TokenAuthenticator(
+        auth_mode="oidc",
+        oidc_issuer="https://project.supabase.co/auth/v1",
+        oidc_audience="authenticated",
+        jwk_provider=StaticKeyProvider(public_key),
+    )
+    from backend.core.auth import AuthFailure
+
+    with pytest.raises(AuthFailure) as caught:
+        authenticator.authenticate(f"Bearer {token}")
+    assert caught.value.status_code == 403
+
+
+def test_es256_oidc_token_is_accepted():
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    token = jwt.encode(
+        {
+            "sub": "es256-user",
+            "role": "viewer",
+            "iss": "https://issuer.example",
+            "aud": "ashencrm",
+            "exp": int(time.time()) + 600,
+        },
+        private_key,
+        algorithm="ES256",
+    )
+    authenticator = TokenAuthenticator(
+        auth_mode="oidc",
+        oidc_issuer="https://issuer.example",
+        oidc_audience="ashencrm",
+        jwk_provider=StaticKeyProvider(private_key.public_key()),
+    )
+    principal = authenticator.authenticate(f"Bearer {token}")
+    assert principal.role == "viewer"
+
+
 def test_local_token_rejects_wrong_secret():
     token = issue_local_token("one-secret", "admin")
     authenticator = TokenAuthenticator(auth_mode="local", local_secret="other-secret")

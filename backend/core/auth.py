@@ -4,7 +4,9 @@ Modo local (development/test): JWT HS256 firmado con AUTH_LOCAL_SECRET.
 No hay almacén de contraseñas. El rol sale del claim `role`; los permisos
 se derivan en el servidor y no se aceptan desde el token.
 
-Modo oidc: JWT RS256 contra el issuer/audience configurados y un proveedor JWKS.
+Modo oidc: JWT RS256 o ES256 contra el issuer/audience configurados y un proveedor JWKS.
+El rol de aplicación se lee de app_metadata. El claim role de Supabase
+(`authenticated`) no concede permisos, y user_metadata tampoco.
 """
 
 from __future__ import annotations
@@ -41,6 +43,8 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
 }
 
 _ROLE_PRECEDENCE = ("admin", "operator", "reviewer", "viewer")
+# Roles de Postgres/Supabase Auth. No son roles de la aplicación.
+_IGNORED_PROVIDER_ROLES = {"authenticated", "anon", "service_role"}
 
 
 class AuthFailure(Exception):
@@ -184,16 +188,23 @@ def principal_from_claims(claims: Mapping[str, Any], *, auth_mode: str) -> Princ
     )
 
 
+def _collect_roles(value: Any, found: set[str]) -> None:
+    if isinstance(value, str):
+        if value not in _IGNORED_PROVIDER_ROLES:
+            found.add(value)
+    elif isinstance(value, list):
+        for item in value:
+            _collect_roles(item, found)
+
+
 def _role_from_claims(claims: Mapping[str, Any]) -> str:
     found: set[str] = set()
-    role = claims.get("role")
-    if isinstance(role, str):
-        found.add(role)
-    roles = claims.get("roles")
-    if isinstance(roles, str):
-        found.add(roles)
-    elif isinstance(roles, list):
-        found.update(item for item in roles if isinstance(item, str))
+    app_meta = claims.get("app_metadata")
+    if isinstance(app_meta, dict):
+        _collect_roles(app_meta.get("role"), found)
+        _collect_roles(app_meta.get("roles"), found)
+    _collect_roles(claims.get("role"), found)
+    _collect_roles(claims.get("roles"), found)
     known = found.intersection(ROLE_PERMISSIONS)
     for candidate in _ROLE_PRECEDENCE:
         if candidate in known:
@@ -258,7 +269,7 @@ class TokenAuthenticator:
         payload = jwt.decode(
             token,
             key,
-            algorithms=["RS256"],
+            algorithms=["RS256", "ES256"],
             audience=self.oidc_audience,
             issuer=self.oidc_issuer,
             options={"require": ["exp", "sub"]},

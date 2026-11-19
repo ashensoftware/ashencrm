@@ -35,6 +35,34 @@ export function clearAccessToken(): void {
   sessionStorage.removeItem(ACCESS_TOKEN_KEY);
 }
 
+export async function signInWithPassword(email: string, password: string): Promise<void> {
+  const url = String(import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+  const key = String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "");
+  if (!url || !key) {
+    throw new Error("Supabase no está configurado en el .env de la raíz.");
+  }
+  const response = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: { apikey: key, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const payload = (await response.json().catch(() => ({}))) as {
+    access_token?: unknown;
+    error_description?: unknown;
+    msg?: unknown;
+  };
+  if (!response.ok || typeof payload.access_token !== "string" || !payload.access_token) {
+    const detail =
+      typeof payload.error_description === "string"
+        ? payload.error_description
+        : typeof payload.msg === "string"
+          ? payload.msg
+          : "No se pudo iniciar sesión.";
+    throw new Error(detail);
+  }
+  storeAccessToken(payload.access_token);
+}
+
 function applyHeaders(opts: RequestInit): Headers {
   const headers = new Headers();
   headers.set("Content-Type", "application/json");

@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+exec > >(tee /var/log/ashencrm-startup.log) 2>&1
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y python3 python3-venv python3-pip git curl
@@ -15,8 +16,8 @@ fi
 
 cd /opt/ashencrm/repo
 python3 -m venv /opt/ashencrm/venv
-/opt/ashencrm/venv/bin/pip install --upgrade pip
-/opt/ashencrm/venv/bin/pip install -e .
+/opt/ashencrm/venv/bin/pip install --upgrade pip setuptools wheel
+/opt/ashencrm/venv/bin/pip install -e . "uvicorn[standard]"
 
 ACCESS_TOKEN=$(curl -s -H "Metadata-Flavor: Google" \
   "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
@@ -69,3 +70,4 @@ UNIT
 systemctl daemon-reload
 systemctl enable ashencrm
 systemctl restart ashencrm
+systemctl --no-pager --full status ashencrm || true

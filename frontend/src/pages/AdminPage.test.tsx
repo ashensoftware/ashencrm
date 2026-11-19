@@ -29,6 +29,7 @@ describe("AdminPage access token", () => {
       />
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /Usar token de acceso/i }));
     expect(screen.getByLabelText(/Token de acceso/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Parametros" }));
     expect(await screen.findByText(/token de administrador/i)).toBeTruthy();

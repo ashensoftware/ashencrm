@@ -47,7 +47,7 @@ resource "google_compute_instance" "api" {
   }
 
   metadata = {
-    enable-oslogin = "TRUE"
+    enable-oslogin = "FALSE"
   }
 
   metadata_startup_script = templatefile("${path.module}/startup.sh.tftpl", {

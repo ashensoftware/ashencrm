@@ -8,6 +8,7 @@ from typing import Optional
 from playwright.async_api import async_playwright
 
 from backend.config.settings import settings
+from backend.generator.verification import conclude_lovable_preview, is_acceptable_demo_url
 
 
 class LovableAutomation:
@@ -63,8 +64,8 @@ class LovableAutomation:
 
     async def create_site(self, prompt: str) -> Optional[str]:
         """
-        Navega a Lovable y crea un nuevo sitio basado en el prompt.
-        Retorna la URL del sitio generado si se detecta; si no, un placeholder estable.
+        Navega a Lovable y crea un sitio a partir del prompt.
+        Retorna la URL solo si se detectó un preview real. Nunca inventa una URL.
         """
         timeout_sec = max(30, settings.generator.lovable_timeout)
 
@@ -114,21 +115,22 @@ class LovableAutomation:
             deadline = time.monotonic() + timeout_sec
             while time.monotonic() < deadline:
                 await asyncio.sleep(5)
-                url = await self._find_preview_url()
-                if url:
-                    print(f"[{self .account_id }] Preview detectado: {url }")
+                url = conclude_lovable_preview(
+                    await self._find_preview_url(),
+                    timed_out=False,
+                )
+                if url and is_acceptable_demo_url(url):
+                    print(f"[{self.account_id}] Preview detectado: {url}")
                     return url
 
-            url = await self._find_preview_url()
+            url = conclude_lovable_preview(await self._find_preview_url(), timed_out=False)
             if url:
                 return url
 
-            placeholder = f"https://demo-{self .account_id }.lovable.app"
             print(
-                f"[{self .account_id }] Lovable: no se detecto URL de preview; "
-                f"usando placeholder {placeholder } (revisa la sesion/UI)."
+                f"[{self.account_id}] Lovable: timeout sin URL de preview verificable."
             )
-            return placeholder
+            return conclude_lovable_preview(None, timed_out=True)
 
         except Exception as e:
             print(f"[{self .account_id }] Error en Lovable: {e }")

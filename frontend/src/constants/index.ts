@@ -17,6 +17,7 @@ export const MSG = {
   PROCESS_STARTED: "Proceso iniciado",
   AI_DESIGNING: "La IA está diseñando tu web.",
   WHATSAPP_SENDING: "Preparando envío.",
+  WHATSAPP_DRY_RUN: "Dry-run: no se envió ningún mensaje de WhatsApp.",
   NO_LEADS_FILTER: "No hay leads con los filtros actuales.",
   TYPE_BORRAR: (name: string) => `Escribe 'BORRAR' para quitar "${name}":`,
   CONNECTING: "Conectando...",

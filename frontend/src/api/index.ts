@@ -10,19 +10,57 @@ import type {
 } from "../types";
 
 const BASE = "/api";
+const ACCESS_TOKEN_KEY = "ashencrm.accessToken";
+
+export function accessToken(): string {
+  const fromEnv = import.meta.env.VITE_LOCAL_ACCESS_TOKEN;
+  if (typeof fromEnv === "string" && fromEnv.trim()) return fromEnv.trim();
+  try {
+    return sessionStorage.getItem(ACCESS_TOKEN_KEY)?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+export function storeAccessToken(token: string): void {
+  const value = token.trim();
+  if (!value) {
+    sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+    return;
+  }
+  sessionStorage.setItem(ACCESS_TOKEN_KEY, value);
+}
+
+export function clearAccessToken(): void {
+  sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+}
+
+function applyHeaders(opts: RequestInit): Headers {
+  const headers = new Headers();
+  headers.set("Content-Type", "application/json");
+  const token = accessToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (opts.headers) {
+    new Headers(opts.headers).forEach((value, key) => headers.set(key, value));
+  }
+  return headers;
+}
 
 export function createRequest() {
   return async (path: string, opts: RequestInit = {}) =>
     fetch(`${BASE}${path}`, {
-      headers: { "Content-Type": "application/json", ...opts.headers } as HeadersInit,
       ...opts,
+      headers: applyHeaders(opts),
     });
 }
 
 const request = createRequest();
 
 export async function fetchCatalog(): Promise<CatalogItem[]> {
-  return (await request("/catalog/categories")).json();
+  const res = await request("/catalog/categories");
+  throwIfAuth(res);
+  if (!res.ok) throw new Error("No se pudo cargar el catálogo");
+  return res.json();
 }
 
 export async function fetchProspects(filters: ProspectFilters = {}): Promise<Prospect[]> {
@@ -33,15 +71,24 @@ export async function fetchProspects(filters: ProspectFilters = {}): Promise<Pro
   if (filters.contacted) params.append("contacted", filters.contacted);
   if (filters.has_instagram) params.append("has_instagram", filters.has_instagram);
   if (filters.name) params.append("name", filters.name);
-  return (await request(`/prospects?${params}`)).json();
+  const res = await request(`/prospects?${params}`);
+  throwIfAuth(res);
+  if (!res.ok) throw new Error("No se pudieron cargar los prospectos");
+  return res.json();
 }
 
 export async function fetchStats(): Promise<Record<string, number>> {
-  return (await request("/stats")).json();
+  const res = await request("/stats");
+  throwIfAuth(res);
+  if (!res.ok) throw new Error("No se pudieron cargar las estadísticas");
+  return res.json();
 }
 
 export async function fetchHexagons() {
-  return (await request("/hexagons")).json();
+  const res = await request("/hexagons");
+  throwIfAuth(res);
+  if (!res.ok) throw new Error("No se pudieron cargar los hexágonos");
+  return res.json();
 }
 
 export function startScrape(body: object) {
@@ -96,14 +143,22 @@ export async function sendWhatsApp(name: string) {
   return (await request(`/prospects/${encodeURIComponent(name)}/send-whatsapp`, { method: "POST" })).json();
 }
 
+function throwIfAuth(res: Response): void {
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(`AUTH_${res.status}`);
+  }
+}
+
 export async function fetchAdminSettings(): Promise<AppSettings> {
   const res = await request("/admin/settings");
+  throwIfAuth(res);
   if (!res.ok) throw new Error("No se pudieron cargar los ajustes");
   return res.json();
 }
 
 export async function patchAdminSettings(partial: Partial<AppSettings>): Promise<AppSettings> {
   const res = await request("/admin/settings", { method: "PATCH", body: JSON.stringify(partial) });
+  throwIfAuth(res);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as { detail?: string }).detail || "Error al guardar");
@@ -123,6 +178,7 @@ export type SqlConsoleResult =
 
 export async function fetchSqlConsoleStatus(): Promise<{ enabled: boolean }> {
   const res = await request("/admin/sql/status");
+  throwIfAuth(res);
   if (!res.ok) throw new Error("No se pudo cargar el estado de la consola SQL");
   return res.json();
 }
@@ -132,6 +188,7 @@ export async function executeAdminSql(sql: string): Promise<SqlConsoleResult> {
     method: "POST",
     body: JSON.stringify({ sql }),
   });
+  throwIfAuth(res);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = data as { detail?: string | string[] };
@@ -169,8 +226,12 @@ export function getScreenshotUrl(path?: string): string | null {
   return name ? `/api/screenshots/${encodeURIComponent(name)}` : null;
 }
 
-const rawFetch = (path: string, opts: RequestInit = {}) =>
-  fetch(`${BASE}${path}`, opts);
+const rawFetch = (path: string, opts: RequestInit = {}) => {
+  const headers = new Headers(opts.headers);
+  const token = accessToken();
+  if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+  return fetch(`${BASE}${path}`, { ...opts, headers });
+};
 
 export async function fetchClients(): Promise<Client[]> {
   const res = await rawFetch("/clients");
@@ -291,4 +352,35 @@ export async function patchClientMeeting(
 export async function deleteClientMeeting(meetingId: number): Promise<void> {
   const res = await request(`/clients/meetings/${meetingId}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Error al eliminar reunión");
+}
+
+export async function validateDemoUrl(url: string): Promise<{ success: boolean; verified: boolean; status: string; detail: string }> {
+  const res = await request("/demos/validate", { method: "POST", body: JSON.stringify({ url }) });
+  throwIfAuth(res);
+  return res.json();
+}
+
+export async function createPipelineRun(body: Record<string, unknown>, idempotencyKey: string) {
+  const res = await request("/v1/pipeline-runs", {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(body),
+  });
+  throwIfAuth(res);
+  if (!res.ok) throw new Error("No se pudo crear la ejecución");
+  return res.json();
+}
+
+export async function fetchPipelineRun(id: string) {
+  const res = await request(`/v1/pipeline-runs/${id}`);
+  throwIfAuth(res);
+  if (!res.ok) throw new Error("No se pudo leer la ejecución");
+  return res.json();
+}
+
+export async function pipelineAction(id: string, action: "pause" | "resume" | "cancel" | "retry-failed") {
+  const res = await request(`/v1/pipeline-runs/${id}/${action}`, { method: "POST" });
+  throwIfAuth(res);
+  if (!res.ok) throw new Error("No se pudo actualizar la ejecución");
+  return res.json();
 }

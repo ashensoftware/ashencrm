@@ -3,7 +3,9 @@ Servicio para orquestar el envío de mensajes a prospectos.
 """
 
 import asyncio
+from backend.config.settings import settings
 from backend.outreach.message_builder import build_whatsapp_message
+from backend.outreach.policy import outreach_is_live
 from backend.outreach.whatsapp import WhatsAppAutomation
 from backend.domain.prospect import Prospect, ProspectStatus
 
@@ -13,10 +15,25 @@ class OutreachService:
         self.db = db
         self.wa = WhatsAppAutomation()
 
+    def delivery_is_live(self) -> bool:
+        return outreach_is_live(settings.app_env, settings.outreach_enabled)
+
     async def send_proposal(self, prospect: Prospect) -> dict:
         """
         Envía la propuesta personalizada vía WhatsApp.
+        En development/test, o con OUTREACH_ENABLED apagado, no abre el navegador.
         """
+        if not self.delivery_is_live():
+            return {
+                "success": False,
+                "dry_run": True,
+                "delivered": False,
+                "status": "dry_run",
+                "message": (
+                    "Outreach en dry-run: no se abrió WhatsApp ni se envió ningún mensaje."
+                ),
+            }
+
         if not prospect.demo_url:
             return {"error": "El prospecto no tiene un demo generado aún."}
 

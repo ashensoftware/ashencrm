@@ -58,6 +58,59 @@ def _leading_sql_verb(stmt: str) -> str:
     return ""
 
 
+_SQL_WRITE_VERBS = (
+    "INSERT",
+    "UPDATE",
+    "DELETE",
+    "DROP",
+    "ALTER",
+    "CREATE",
+    "REPLACE",
+    "ATTACH",
+    "DETACH",
+    "VACUUM",
+    "REINDEX",
+    "PRAGMA",
+    "ANALYZE",
+    "BEGIN",
+    "COMMIT",
+    "ROLLBACK",
+    "SAVEPOINT",
+    "RELEASE",
+    "TRUNCATE",
+    "GRANT",
+    "REVOKE",
+)
+_SQL_DANGEROUS_FUNCTIONS = ("LOAD_EXTENSION", "WRITEFILE", "READFILE", "EDIT")
+
+
+def _strip_sql_literals_and_comments(stmt: str) -> str:
+    without_block = re.sub(r"/\*.*?\*/", " ", stmt, flags=re.S)
+    without_line = re.sub(r"--.*?$", " ", without_block, flags=re.M)
+    return re.sub(r"'(?:''|[^'])*'", "''", without_line)
+
+
+def assert_sql_console_readonly(stmt: str) -> None:
+    """Rechaza escrituras, DDL y PRAGMA. SELECT 'DELETE' sigue siendo lectura."""
+    scrubbed = _strip_sql_literals_and_comments(stmt)
+    verb = _leading_sql_verb(stmt)
+    if verb not in {"SELECT", "WITH", "EXPLAIN"}:
+        raise ValueError(
+            "Sentencia rechazada: la consola solo acepta consultas de lectura (SELECT)"
+        )
+    for forbidden in _SQL_WRITE_VERBS:
+        if re.search(rf"\b{forbidden}\b", scrubbed, re.IGNORECASE):
+            raise ValueError(f"Sentencia rechazada: {forbidden} no está permitido")
+    for function_name in _SQL_DANGEROUS_FUNCTIONS:
+        if re.search(rf"\b{function_name}\b", scrubbed, re.IGNORECASE):
+            raise ValueError(f"Sentencia rechazada: {function_name} no está permitido")
+    if verb == "EXPLAIN":
+        tail = re.sub(r"(?is)^EXPLAIN(\s+QUERY\s+PLAN)?", "", scrubbed).strip()
+        inner = _leading_sql_verb(tail)
+        if inner not in {"SELECT", "WITH"}:
+            raise ValueError("Sentencia rechazada: EXPLAIN solo puede envolver un SELECT")
+
+
 class ProspectRepository:
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path or settings.db_path
@@ -361,10 +414,7 @@ class ProspectRepository:
     SQL_CONSOLE_MAX_ROWS = 2000
 
     def execute_sql_console(self, sql: str) -> dict[str, Any]:
-        """
-        Una sola sentencia SQLite; SELECT/PRAGMA/EXPLAIN devuelven filas; el resto hace commit.
-        Pensado solo para la consola de administración (proteger con ALLOW_SQL_CONSOLE).
-        """
+        """Una sola sentencia de lectura. No hace commit."""
         raw = (sql or "").strip()
         if not raw:
             raise ValueError("SQL vacío")
@@ -373,17 +423,7 @@ class ProspectRepository:
             raise ValueError("SQL vacío")
         if ";" in stmt:
             raise ValueError("Solo una sentencia a la vez (sin punto y coma interior)")
-        for pat in (r"\bATTACH\b", r"\bDETACH\b", r"\bVACUUM\b"):
-            if re.search(pat, stmt, re.IGNORECASE):
-                raise ValueError("Esta sentencia no está permitida (ATTACH/DETACH/VACUUM)")
-
-        verb = _leading_sql_verb(stmt)
-        read_only = verb in (
-            "SELECT",
-            "WITH",
-            "PRAGMA",
-            "EXPLAIN",
-        )
+        assert_sql_console_readonly(stmt)
 
         def row_to_dict(description: list, row: sqlite3.Row) -> dict[str, Any]:
             out: dict[str, Any] = {}
@@ -394,32 +434,36 @@ class ProspectRepository:
                 out[col] = v
             return out
 
-        with self._get_conn() as conn:
+        conn = self._get_conn()
+        try:
             cur = conn.cursor()
             cur.execute(stmt)
-            if read_only:
-                desc = [d[0] for d in (cur.description or [])]
-                rows_out: list[dict[str, Any]] = []
-                cap = self.SQL_CONSOLE_MAX_ROWS
-                while len(rows_out) < cap:
-                    chunk = cur.fetchmany(min(500, cap - len(rows_out)))
-                    if not chunk:
-                        break
-                    for row in chunk:
-                        rows_out.append(row_to_dict(desc, row))
-                truncated = False
-                if len(rows_out) == cap:
-                    extra = cur.fetchone()
-                    truncated = extra is not None
-                return {
-                    "kind": "select",
-                    "columns": desc,
-                    "rows": rows_out,
-                    "rowcount": len(rows_out),
-                    "truncated": truncated,
-                }
-            conn.commit()
-            return {"kind": "mutate", "rowcount": cur.rowcount}
+            desc = [d[0] for d in (cur.description or [])]
+            rows_out: list[dict[str, Any]] = []
+            cap = self.SQL_CONSOLE_MAX_ROWS
+            while len(rows_out) < cap:
+                chunk = cur.fetchmany(min(500, cap - len(rows_out)))
+                if not chunk:
+                    break
+                for row in chunk:
+                    rows_out.append(row_to_dict(desc, row))
+            truncated = False
+            if len(rows_out) == cap:
+                extra = cur.fetchone()
+                truncated = extra is not None
+            conn.rollback()
+            return {
+                "kind": "select",
+                "columns": desc,
+                "rows": rows_out,
+                "rowcount": len(rows_out),
+                "truncated": truncated,
+            }
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def count_by_status(self) -> dict[str, int]:
         with self._conn() as conn:

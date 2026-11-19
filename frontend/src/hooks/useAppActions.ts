@@ -7,6 +7,8 @@ import {
   fetchRandomProspect,
   sendWhatsApp,
   createProspect,
+  accessToken,
+  validateDemoUrl,
 } from "../api";
 import { MSG, LABELS, DEFAULT_CITY, DEFAULT_SCRAPE_LIMIT } from "../constants";
 import { useModals } from "./useModals";
@@ -126,7 +128,10 @@ export function useAppActions(
     async (name: string) => {
       const confirm = await modals.showPrompt(MSG.DELETE, MSG.TYPE_BORRAR(name));
       if (confirm === "BORRAR") {
-        await fetch(`/api/catalog/categories/${encodeURIComponent(name)}`, { method: "DELETE" });
+        await fetch(`/api/catalog/categories/${encodeURIComponent(name)}`, {
+          method: "DELETE",
+          headers: accessToken() ? { Authorization: `Bearer ${accessToken()}` } : {},
+        });
         await refreshCatalog();
       }
     },
@@ -140,7 +145,10 @@ export function useAppActions(
     if (!label) return;
     await fetch("/api/catalog/categories", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken() ? { Authorization: `Bearer ${accessToken()}` } : {}),
+      },
       body: JSON.stringify({ name, label }),
     });
     await refreshCatalog();
@@ -156,14 +164,17 @@ export function useAppActions(
     if (!selectedProspect) return;
     const url = await modals.showPrompt("Ingresar URL de Demo", "Pega el enlace de Lovable que creaste para este cliente:");
     if (!url) return;
-    const r = await updateProspect(selectedProspect.name, { demo_url: url, status: "demo_created" });
-    if (r.ok) { modals.showAlert(MSG.SUCCESS, "Demo guardada correctamente"); refresh(); }
-  }, [selectedProspect, modals, refresh]);
+    const result = await validateDemoUrl(url);
+    modals.showAlert("Validación de demo", result.detail || "La URL no quedó verificada");
+  }, [selectedProspect, modals]);
 
   const handleWhatsApp = useCallback(async () => {
     if (!selectedProspect) return;
-    await sendWhatsApp(selectedProspect.name);
-    modals.showAlert("WhatsApp", MSG.WHATSAPP_SENDING);
+    const result = await sendWhatsApp(selectedProspect.name);
+    modals.showAlert(
+      "WhatsApp",
+      result?.dry_run ? result.message || MSG.WHATSAPP_DRY_RUN : MSG.WHATSAPP_SENDING
+    );
   }, [selectedProspect, modals]);
 
   const handleAddProspectSubmit = useCallback(async (data: Partial<Prospect>) => {

@@ -35,15 +35,49 @@ SELECT 2 AS x"""
 
 
 def test_execute_sql_console_rejects_attach(repo: ProspectRepository):
-    with pytest.raises(ValueError, match="no está permitida"):
+    with pytest.raises(ValueError, match="Sentencia rechazada"):
         repo.execute_sql_console("ATTACH DATABASE 'x.db' AS x")
 
 
-def test_execute_sql_console_mutate(repo: ProspectRepository):
-    repo.execute_sql_console("CREATE TABLE t (id INTEGER)")
-    out = repo.execute_sql_console("INSERT INTO t (id) VALUES (7)")
-    assert out["kind"] == "mutate"
-    assert out["rowcount"] == 1
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "CREATE TABLE t (id INTEGER)",
+        "INSERT INTO prospects (name, category) VALUES ('x', 'y')",
+        "UPDATE prospects SET notes = 'x'",
+        "DELETE FROM prospects",
+        "DROP TABLE prospects",
+        "ALTER TABLE prospects ADD COLUMN extra TEXT",
+        "PRAGMA writable_schema = ON",
+        "VACUUM",
+        "DETACH DATABASE main",
+        "REPLACE INTO prospects (name, category) VALUES ('x', 'y')",
+    ],
+)
+def test_execute_sql_console_rejects_writes(repo: ProspectRepository, sql: str):
+    with pytest.raises(ValueError, match="Sentencia rechazada"):
+        repo.execute_sql_console(sql)
+
+
+def test_execute_sql_console_allows_delete_inside_a_string_literal(repo: ProspectRepository):
+    out = repo.execute_sql_console("SELECT 'DELETE' AS verb")
+    assert out["kind"] == "select"
+    assert out["rows"] == [{"verb": "DELETE"}]
+
+
+def test_execute_sql_console_explain_select(repo: ProspectRepository):
+    out = repo.execute_sql_console("EXPLAIN QUERY PLAN SELECT 1")
+    assert out["kind"] == "select"
+    assert out["rows"]
+
+
+def test_rejected_write_is_not_committed(repo: ProspectRepository):
+    with pytest.raises(ValueError, match="Sentencia rechazada"):
+        repo.execute_sql_console("CREATE TABLE leaked (id INTEGER)")
+    out = repo.execute_sql_console(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'leaked'"
+    )
+    assert out["rows"] == []
 
 
 def test_execute_sql_console_rejects_multiple_statements(repo: ProspectRepository):

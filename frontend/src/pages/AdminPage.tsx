@@ -14,6 +14,7 @@ import {
 } from "../api";
 import { Tags, SlidersHorizontal, MessageSquare, ChevronLeft, ChevronRight, Save, Loader2, Braces, Trash2, Terminal } from "lucide-react";
 import { IconPickerModal } from "../organisms/modals/IconPickerModal";
+import { AdminAccessTokenForm } from "../organisms/AdminAccessTokenForm";
 import { LucideCategoryIcon, getCategoryIconLabel } from "../utils/categoryLucideIcons";
 import { WHATSAPP_TEMPLATE_PLACEHOLDERS } from "../constants/whatsappTemplatePlaceholders";
 
@@ -25,16 +26,8 @@ function formatSqlCell(v: unknown): string {
   return String(v);
 }
 
-const SQL_EXAMPLES = `-- Cuántos leads siguen en "scraped" (sin tocar / aún no en pipeline)
-SELECT COUNT(*) AS n FROM prospects WHERE status = 'scraped';
-
--- Borrar solo esos (para volver a scrapear desde cero con los fixes)
-DELETE FROM prospects WHERE status = 'scraped';
-
--- Igual pero sin borrar filas que ya tengan ficha de cliente vinculada
-DELETE FROM prospects
-WHERE status = 'scraped'
-  AND id NOT IN (SELECT prospect_id FROM clients WHERE prospect_id IS NOT NULL);
+const SQL_EXAMPLES = `-- Conteos por estado (solo lectura)
+SELECT status, COUNT(*) AS n FROM prospects GROUP BY status ORDER BY n DESC;
 
 -- Tablas en la base (SQLite)
 SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;
@@ -72,15 +65,28 @@ export function AdminPage({
   const [sqlResult, setSqlResult] = useState<SqlConsoleResult | null>(null);
   const [sqlError, setSqlError] = useState<string | null>(null);
   const [sqlEnabled, setSqlEnabled] = useState<boolean | null>(null);
+  const [authCode, setAuthCode] = useState<401 | 403 | null>(null);
 
   const loadDraft = useCallback(async () => {
     try {
       const data = await fetchAdminSettings();
+      setAuthCode(null);
       setDraft(data);
       if (tab === "templates") {
         setTemplatesBaseline(JSON.parse(JSON.stringify(data.whatsapp_templates)));
       }
-    } catch {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      if (msg === "AUTH_401" || msg === "AUTH_403") {
+        setAuthCode(msg === "AUTH_401" ? 401 : 403);
+        setDraft(null);
+        setNotice(
+          msg === "AUTH_401"
+            ? "Se requiere un token de administrador para parámetros, plantillas y SQL."
+            : "El token no tiene rol admin."
+        );
+        return;
+      }
       setNotice("No se pudieron cargar los parametros.");
     }
   }, [tab]);
@@ -301,10 +307,23 @@ export function AdminPage({
     let cancelled = false;
     fetchSqlConsoleStatus()
       .then((s) => {
-        if (!cancelled) setSqlEnabled(s.enabled);
+        if (!cancelled) {
+          setAuthCode(null);
+          setSqlEnabled(s.enabled);
+        }
       })
-      .catch(() => {
-        if (!cancelled) setSqlEnabled(false);
+      .catch((e) => {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : "";
+        if (msg === "AUTH_401" || msg === "AUTH_403") {
+          setAuthCode(msg === "AUTH_401" ? 401 : 403);
+          setNotice(
+            msg === "AUTH_401"
+              ? "Se requiere un token de administrador para parámetros, plantillas y SQL."
+              : "El token no tiene rol admin."
+          );
+        }
+        setSqlEnabled(false);
       });
     return () => {
       cancelled = true;
@@ -331,6 +350,7 @@ export function AdminPage({
         <p style={{ margin: "0.25rem 0 0", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
           Categorias del catalogo, parametros operativos y plantillas configurables (persistidas en base de datos).
         </p>
+        <AdminAccessTokenForm hint="Pega un JWT de rol admin. El valor queda en esta pestaña del navegador y no se guarda como contraseña." />
         <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", flexWrap: "wrap" }}>
           {tabBtn("categories", <Tags size={18} />, "Categorias")}
           {tabBtn("parameters", <SlidersHorizontal size={18} />, "Parametros")}
@@ -463,10 +483,15 @@ export function AdminPage({
         {tab === "sql" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem", maxWidth: "min(100%, 960px)" }}>
             <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: 1.55 }}>
-              Ejecuta <strong>una sentencia</strong> SQLite sobre la base del CRM (<code>prospects.db</code>). Útil para
-              inspeccionar datos o borrar leads <code>scraped</code> antes de un rescrape. En entornos expuestos desactiva
-              la consola con <code style={{ fontSize: "0.85em" }}>ALLOW_SQL_CONSOLE=0</code> en <code>.env</code>.
+              Ejecuta <strong>una consulta de lectura</strong> sobre la base del CRM. UPDATE, INSERT, DELETE,
+              DROP, ALTER, CREATE, PRAGMA y VACUUM se rechazan. La consola está apagada por defecto
+              (<code>ALLOW_SQL_CONSOLE</code> no viene activa). En production no basta con ese flag.
             </p>
+            {authCode && (
+              <div style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                Hace falta un token con rol admin para consultar el estado de la consola.
+              </div>
+            )}
             {sqlEnabled === false && (
               <div
                 style={{
@@ -478,8 +503,9 @@ export function AdminPage({
                   fontSize: "0.9rem",
                 }}
               >
-                La consola SQL está deshabilitada en el servidor. Añade <code>ALLOW_SQL_CONSOLE=1</code> en{" "}
-                <code>.env</code> y reinicia el backend.
+                La consola SQL está deshabilitada. En development se puede activar con{" "}
+                <code>ALLOW_SQL_CONSOLE=1</code> y reiniciar el backend. En production permanece apagada salvo un
+                acuse explícito de solo lectura, y aun así exige rol admin.
               </div>
             )}
             <textarea

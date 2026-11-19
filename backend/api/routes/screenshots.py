@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-ROOT = Path(__file__).resolve().parents[5]
+ROOT = Path(__file__).resolve().parents[3]
 SCREENSHOTS_DIR = ROOT / "data" / "screenshots"
 
 router = APIRouter(prefix="/api/screenshots", tags=["Screenshots"])

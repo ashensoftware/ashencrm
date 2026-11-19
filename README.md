@@ -35,13 +35,14 @@ python scripts/run_generator.py --limit 1 --execute
 
 Variables útiles: `LOVABLE_TIMEOUT`, `LOVABLE_HEADLESS` (ver `.env.example`).
 
-**Estado actual:** la UI de Lovable cambia; si no se detecta la URL del preview, el código puede guardar un **placeholder** y conviene revisar el proyecto en el navegador y actualizar `demo_url` en la base si hace falta.
+**Estado actual:** si Lovable no devuelve una URL real de preview, la generación queda incompleta. No se inventa `demo_url` ni se marca `demo_created` sin captura verificada.
 
 ### Módulo 3: Outreach (WhatsApp)
-Envía la propuesta por WhatsApp Web (requiere escanear QR si la sesión no está guardada).
+El envío real está apagado por defecto (`OUTREACH_ENABLED=false`). En development y test el servicio responde dry-run y no abre WhatsApp Web, aunque el flag esté en true. El código legado de WhatsApp Web sigue en el repositorio, detrás de esa compuerta, y no es el camino soportado para producción.
 
 ```bash
-# Misma idea: dry-run vs ejecución real (ver scripts/run_next_phases.py)
+# Sin --execute no corre las fases.
+# Con --execute, en development/test el outreach sigue en dry-run y no abre WhatsApp.
 python scripts/run_next_phases.py --execute
 ```
 

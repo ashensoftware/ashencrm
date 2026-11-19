@@ -22,6 +22,19 @@ resource "google_compute_firewall" "api_http" {
   target_tags   = ["ashencrm-api"]
 }
 
+resource "google_compute_firewall" "api_ssh" {
+  name    = "ashencrm-allow-ssh"
+  network = "default"
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["ashencrm-api"]
+}
+
 resource "google_compute_instance" "api" {
   name         = "ashencrm-api"
   machine_type = "e2-micro"

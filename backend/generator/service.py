@@ -8,6 +8,10 @@ from backend.generator.account_manager import AccountManager
 from backend.generator.lovable import LovableAutomation
 from backend.generator.prompt_builder import build_demo_prompt
 from backend.generator.screenshot import ScreenshotTaker
+from backend.generator.verification import (
+    is_acceptable_demo_url,
+    screenshot_file_verified,
+)
 
 
 class GeneratorService:
@@ -24,12 +28,22 @@ class GeneratorService:
         try:
             await lo.start(headless=settings.generator.lovable_headless)
             demo_url = await lo.create_site(prompt)
-            if not demo_url:
-                return {"error": "No se pudo generar el sitio en Lovable"}
+            if not is_acceptable_demo_url(demo_url):
+                return {
+                    "success": False,
+                    "status": "incomplete",
+                    "error": "Lovable no devolvió una URL de demo verificable",
+                }
             safe_name = re.sub(r"[^a-zA-Z0-9_-]+", "_", prospect.name.strip().lower())
             screenshot_path = await self.screenshot_taker.capture(
-                demo_url, f"hero_{safe_name }"
+                demo_url, f"hero_{safe_name}"
             )
+            if not screenshot_file_verified(screenshot_path):
+                return {
+                    "success": False,
+                    "status": "incomplete",
+                    "error": "La captura de la demo no pudo verificarse",
+                }
             update_data = {
                 "demo_url": demo_url,
                 "screenshot_path": screenshot_path,
@@ -39,6 +53,7 @@ class GeneratorService:
             self.db.patch_prospect(prospect.name, prospect.address, update_data)
             return {
                 "success": True,
+                "status": ProspectStatus.DEMO_CREATED.value,
                 "demo_url": demo_url,
                 "screenshot_path": screenshot_path,
             }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchAdminSettings, patchAdminSettings } from "../api";
+import { AdminAccessTokenForm } from "../organisms/AdminAccessTokenForm";
 import type { ClientPreferences } from "../types";
 import { Save, Loader2 } from "lucide-react";
 
@@ -31,8 +32,15 @@ export function ClientsAdminPage({ onSettingsSaved }: Props) {
             quote_footer_note: cp?.quote_footer_note ?? "",
           });
         }
-      } catch {
-        if (!cancelled) setNotice("No se pudieron cargar los ajustes.");
+      } catch (e) {
+        if (!cancelled) {
+          const auth = e instanceof Error && e.message.startsWith("AUTH_");
+          setNotice(
+            auth
+              ? "Se requiere un token de administrador para cargar estos ajustes."
+              : "No se pudieron cargar los ajustes."
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -73,11 +81,12 @@ export function ClientsAdminPage({ onSettingsSaved }: Props) {
         <p style={{ color: "var(--text-muted)" }}>Cargando…</p>
       ) : (
         <div className="clients-admin-form">
-          {notice && (
-            <p style={{ color: notice.startsWith("Parámetros") ? "var(--success)" : "var(--warning)", fontSize: "0.9rem" }}>
-              {notice}
-            </p>
-          )}
+      {notice && (
+        <p style={{ color: notice.startsWith("Parámetros") ? "var(--success)" : "var(--warning)", fontSize: "0.9rem" }}>
+          {notice}
+        </p>
+      )}
+      {notice?.includes("token de administrador") && <AdminAccessTokenForm />}
           <label className="clients-admin-label">Moneda por defecto en cotizaciones</label>
           <input
             className="search-input"

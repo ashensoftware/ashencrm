@@ -83,16 +83,90 @@ class Settings:
     db_path: Path = PROJECT_ROOT / "data" / "db" / "prospects.db"
     sessions_dir: Path = PROJECT_ROOT / "data" / "sessions"
     exports_dir: Path = PROJECT_ROOT / "data" / "exports"
-    # Consola SQL en /api/admin/sql (desactivar en entornos expuestos: ALLOW_SQL_CONSOLE=0)
-    sql_console_enabled: bool = field(default_factory=lambda: _env_bool("ALLOW_SQL_CONSOLE", True))
+    app_env: str = field(default_factory=lambda: os.getenv("APP_ENV", "development"))
+    allowed_origins_raw: str = field(default_factory=lambda: os.getenv("ALLOWED_ORIGINS", ""))
+    allowed_origins: list[str] = field(default_factory=list)
+    outreach_enabled: bool = field(default_factory=lambda: _env_bool("OUTREACH_ENABLED", False))
+    auth_mode: str = field(
+        default_factory=lambda: (os.getenv("AUTH_MODE", "local") or "local").strip().lower()
+    )
+    auth_local_secret: str = field(default_factory=lambda: os.getenv("AUTH_LOCAL_SECRET", ""))
+    oidc_issuer: str = field(default_factory=lambda: (os.getenv("OIDC_ISSUER", "") or "").strip())
+    oidc_audience: str = field(
+        default_factory=lambda: (os.getenv("OIDC_AUDIENCE", "") or "").strip()
+    )
+    oidc_jwks_url: str = field(
+        default_factory=lambda: (os.getenv("OIDC_JWKS_URL", "") or "").strip()
+    )
+    sql_console_production_ack: str = field(
+        default_factory=lambda: os.getenv("SQL_CONSOLE_PRODUCTION_ACK", "")
+    )
+    # Apagada salvo ALLOW_SQL_CONSOLE=1. En production además hace falta el acuse.
+    sql_console_enabled: bool = False
+    security_error: str | None = None
+    legacy_maps_scraper_enabled: bool = field(
+        default_factory=lambda: _env_bool("LEGACY_MAPS_SCRAPER_ENABLED", False)
+    )
+    lovable_browser_automation_enabled: bool = field(
+        default_factory=lambda: _env_bool("LOVABLE_BROWSER_AUTOMATION_ENABLED", False)
+    )
+    discovery_provider: str = field(
+        default_factory=lambda: os.getenv("DISCOVERY_PROVIDER", "simulated").strip().lower()
+        or "simulated"
+    )
+    platform_secret_key: str = field(default_factory=lambda: os.getenv("PLATFORM_SECRET_KEY", ""))
+    google_places_api_key: str = field(default_factory=lambda: os.getenv("GOOGLE_PLACES_API_KEY", ""))
+    platform_db_path: Path = PROJECT_ROOT / "data" / "db" / "platform.db"
+    supabase_url: str = field(
+        default_factory=lambda: os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    )
+    supabase_publishable_key: str = field(
+        default_factory=lambda: os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip()
+    )
+    supabase_secret_key: str = field(
+        default_factory=lambda: os.getenv("SUPABASE_SECRET_KEY", "").strip()
+    )
+    supabase_jwks_url: str = field(
+        default_factory=lambda: os.getenv("SUPABASE_JWKS_URL", "").strip()
+    )
 
     def __post_init__(self) -> None:
+        from backend.core.security_policy import (
+            resolve_allowed_origins,
+            resolve_sql_console_enabled,
+        )
+
+        self.sql_console_enabled = resolve_sql_console_enabled(
+            self.app_env,
+            os.getenv("ALLOW_SQL_CONSOLE"),
+            self.sql_console_production_ack,
+        )
+        try:
+            self.allowed_origins = resolve_allowed_origins(
+                self.app_env, self.allowed_origins_raw
+            )
+            self.security_error = None
+        except RuntimeError as exc:
+            self.allowed_origins = []
+            self.security_error = str(exc)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
         self.browser_data_dir.mkdir(parents=True, exist_ok=True)
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         self.exports_dir.mkdir(parents=True, exist_ok=True)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.supabase_url:
+            if not self.oidc_issuer:
+                self.oidc_issuer = f"{self.supabase_url}/auth/v1"
+            if not self.oidc_jwks_url:
+                self.oidc_jwks_url = self.supabase_jwks_url or (
+                    f"{self.supabase_url}/auth/v1/.well-known/jwks.json"
+                )
+            if not self.oidc_audience:
+                self.oidc_audience = "authenticated"
+            explicit_mode = os.getenv("AUTH_MODE", "").strip().lower()
+            if explicit_mode in {"", "local"} and self.supabase_jwks_url:
+                self.auth_mode = "oidc"
 
 
 settings = Settings()

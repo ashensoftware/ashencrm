@@ -13,6 +13,8 @@ import { useAppActions } from "./hooks/useAppActions";
 import { useAppSettings } from "./hooks/useAppSettings";
 import { updateProspect, sendWhatsApp, deleteProspectById } from "./api";
 import { MSG, LABELS } from "./constants";
+import { AdminAccessTokenForm } from "./organisms/AdminAccessTokenForm";
+import { PipelineRunsPage } from "./pages/PipelineRunsPage";
 
 const MapView = lazy(() => import("./organisms/MapView").then((m) => ({ default: m.MapView })));
 const TinderPage = lazy(() => import("./pages").then((m) => ({ default: m.TinderPage })));
@@ -35,18 +37,20 @@ const VIEW_TO_ROUTE: Record<string, string> = {
   panel: "/leads/panel",
   todo: "/leads/kanban",
   admin: "/leads/admin",
+  runs: "/leads/runs",
 };
 
 function resolveLeadsSidebarView(
   pathname: string
-): "overview" | "map" | "tinder" | "panel" | "todo" | "admin" {
-  const m: Record<string, "overview" | "map" | "tinder" | "panel" | "todo" | "admin"> = {
+): "overview" | "map" | "tinder" | "panel" | "todo" | "admin" | "runs" {
+  const m: Record<string, "overview" | "map" | "tinder" | "panel" | "todo" | "admin" | "runs"> = {
     "/leads": "overview",
     "/leads/map": "map",
     "/leads/tinder": "tinder",
     "/leads/panel": "panel",
     "/leads/kanban": "todo",
     "/leads/admin": "admin",
+    "/leads/runs": "runs",
   };
   return m[pathname] ?? "overview";
 }
@@ -61,7 +65,7 @@ function App() {
     return resolveLeadsSidebarView(pathname);
   }, [pathname]);
 
-  const { prospects, hexagons, stats, catalog, filters, setFilters, refresh, refreshCatalog } = useProspects();
+  const { prospects, hexagons, stats, catalog, filters, setFilters, refresh, refreshCatalog, authRequired } = useProspects();
   const { settings: appSettings, reload: reloadAppSettings } = useAppSettings();
   const actions = useAppActions(refresh, refreshCatalog, catalog, appSettings);
   const { modals, scanner, selectedProspect, setSelectedProspect } = actions;
@@ -127,6 +131,9 @@ function App() {
       {showClientsSidebar && <ClientsSidebar />}
 
       <main className="main-content">
+        {authRequired && (
+          <AdminAccessTokenForm hint="La sesión es un JWT en sessionStorage. Pega un token de operador o administrador para cargar prospectos." />
+        )}
         <Suspense
           fallback={
             <div
@@ -195,8 +202,11 @@ function App() {
                     modals.setModal("detail");
                   }}
                   onWhatsApp={async (p) => {
-                    await sendWhatsApp(p.name);
-                    modals.showAlert("WhatsApp", MSG.WHATSAPP_SENDING);
+                    const result = await sendWhatsApp(p.name);
+                    modals.showAlert(
+                      "WhatsApp",
+                      result?.dry_run ? result.message || MSG.WHATSAPP_DRY_RUN : MSG.WHATSAPP_SENDING
+                    );
                   }}
                   onChangeStatus={async (name, status) => {
                     const r = await updateProspect(name, { status });
@@ -233,6 +243,7 @@ function App() {
                 />
               }
             />
+            <Route path="/leads/runs" element={<PipelineRunsPage />} />
 
             <Route path="/clientes" element={<ClientsDashboardPage />} />
             <Route path="/clientes/mapa" element={<ClientsMapPage />} />

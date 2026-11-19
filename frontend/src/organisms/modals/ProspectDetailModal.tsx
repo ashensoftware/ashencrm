@@ -1,5 +1,5 @@
 import type { Prospect } from "../../types";
-import { fetchAdminSettings, getScreenshotUrl, updateProspect } from "../../api";
+import { fetchAdminSettings, getScreenshotUrl, updateProspect, validateDemoUrl } from "../../api";
 import { mapStatusToLabel } from "../../utils";
 import { LABELS } from "../../constants";
 import { X, CheckCircle, ChevronRight, ChevronLeft, Sparkles, Edit2, Globe, Send, Coffee, Utensils, Activity, Scissors, Heart, Hammer, ShoppingBag, Wrench, Briefcase, Tag, MapPin, Info, Clipboard, ClipboardCheck } from "lucide-react";
@@ -646,8 +646,9 @@ export function ProspectDetailModal({
                         return;
                       }
                       setPromptText(renderTemplateWithProspect(gptTemplate, prospect));
-                    } catch {
-                      alert("No se pudo cargar la plantilla GPT.");
+                    } catch (e) {
+                      const auth = e instanceof Error && e.message.startsWith("AUTH_");
+                      alert(auth ? "Se requiere un token de administrador para leer las plantillas." : "No se pudo cargar la plantilla GPT.");
                     } finally {
                       setLoadingGptTemplate(false);
                     }
@@ -740,7 +741,15 @@ export function ProspectDetailModal({
                 <button 
                   className="btn-primary" 
                   style={{ background: '#a78bfa' }} 
-                  onClick={() => performUpdate({ status: 'demo_created', demo_url: demoUrl, lovable_account_used: demoAcc, lovable_prompt: lovablePromptText, demo_rating: Number(demoRating || 0) })}
+                  onClick={async () => {
+                    const result = await validateDemoUrl(demoUrl);
+                    alert(result.detail || "La URL no quedó verificada");
+                    await performUpdate({
+                      lovable_account_used: demoAcc,
+                      lovable_prompt: lovablePromptText,
+                      demo_rating: Number(demoRating || 0),
+                    });
+                  }}
                   disabled={!demoUrl.trim() || !demoAcc.trim() || !lovablePromptText.trim() || Number(demoRating || 0) <= 0 || loading}
                 >
                   <CheckCircle size={18} style={{ marginRight: '6px' }}/> Guardar Demo y Continuar
@@ -766,8 +775,9 @@ export function ProspectDetailModal({
                         return;
                       }
                       setWaMsg(renderTemplateWithProspect(waTemplate, prospect));
-                    } catch {
-                      alert("No se pudo cargar la plantilla de WhatsApp.");
+                    } catch (e) {
+                      const auth = e instanceof Error && e.message.startsWith("AUTH_");
+                      alert(auth ? "Se requiere un token de administrador para leer las plantillas." : "No se pudo cargar la plantilla de WhatsApp.");
                     } finally {
                       setLoadingWaTemplate(false);
                     }

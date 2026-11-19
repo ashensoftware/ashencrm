@@ -84,5 +84,5 @@ export function mapClientStageToColor(stage?: string): string {
 }
 
 export function mapClientStageToLabel(stage?: string): string {
-  return CLIENT_STAGE_LABELS[stage || ""] ?? (stage || "").replace(/_/g, " ") || "—";
+  return (CLIENT_STAGE_LABELS[stage || ""] ?? (stage || "").replace(/_/g, " ")) || "—";
 }

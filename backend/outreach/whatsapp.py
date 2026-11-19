@@ -10,6 +10,7 @@ from urllib.parse import quote
 from playwright.async_api import async_playwright
 
 from backend.config.settings import settings
+from backend.outreach.policy import OutreachDeliveryBlocked, outreach_is_live
 
 
 class WhatsAppAutomation:
@@ -66,6 +67,10 @@ class WhatsAppAutomation:
         """
         Envía un mensaje a un número específico vía URL directa.
         """
+        if not outreach_is_live(settings.app_env, settings.outreach_enabled):
+            raise OutreachDeliveryBlocked(
+                "Envío real de WhatsApp bloqueado (dry-run o OUTREACH_ENABLED=false)."
+            )
         url = self._build_send_url(phone, message)
 
         try:

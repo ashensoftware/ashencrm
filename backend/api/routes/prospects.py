@@ -8,6 +8,8 @@ from backend.generator.prompt_builder import build_demo_prompt
 from backend.generator.account_manager import AccountManager
 from backend.generator.service import GeneratorService
 from backend.outreach.service import OutreachService
+from backend.config.settings import settings
+from backend.core.security_policy import browser_automation_enabled
 import asyncio
 
 
@@ -173,6 +175,12 @@ def create_prospects_router(db):
             if not p:
                 raise HTTPException(status_code=404, detail="Prospecto no encontrado")
 
+            if "demo_url" in data or data.get("status") in {"demo_created", "demo_ready"}:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Una URL pegada no marca la demo. Usa POST /api/demos/validate.",
+                )
+
             if "demo_rating" in data:
                 try:
                     rating = float(data["demo_rating"])
@@ -309,6 +317,15 @@ def create_prospects_router(db):
             if not p:
                 raise HTTPException(status_code=404, detail="Prospecto no encontrado")
 
+            if not browser_automation_enabled(
+                settings.app_env, settings.lovable_browser_automation_enabled
+            ):
+                return {
+                    "success": False,
+                    "status": "MANUAL_ACTION_REQUIRED",
+                    "message": "La automatización de navegador está desactivada. Usa una conexión OAuth de Lovable.",
+                }
+
             asyncio.create_task(gen_service.run_full_generation(p))
 
             return {
@@ -326,6 +343,9 @@ def create_prospects_router(db):
             p = next((x for x in prospects if x.name == name), None)
             if not p:
                 raise HTTPException(status_code=404, detail="Prospecto no encontrado")
+
+            if not outreach_service.delivery_is_live():
+                return await outreach_service.send_proposal(p)
 
             asyncio.create_task(outreach_service.send_proposal(p))
 

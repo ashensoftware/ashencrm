@@ -1,8 +1,12 @@
 # Entornos y logs
 .env
+.env.*
+!.env.example
+.vercel/
 .venv/
 __pycache__/
 *.pyc
+*.egg-info/
 logs/
 .pytest_cache/
 
@@ -12,12 +16,22 @@ dist/
 dist-ssr/
 *.local
 
-# Datos SQLite y Scraper crudos
-data/db/prospects.db
+# Datos SQLite, sesiones de navegador y capturas.
+# Los .db que ya están en el índice siguen trackeados hasta que una persona
+# ejecute git rm --cached después de un backup. Ver docs/modernization/data-sanitization.md
+data/db/*.db
+data/db/*.db-*
+data/db/*.sqlite
+data/db/*.sqlite3
 data/screenshots/
 data/browser_data/
 data/exports/
+data/exports/*.db
 data/sessions/
+**/storage_state.json
+**/*storage_state*.json
+playwright/.auth/
+unused/
 
 # Vite/React
 npm-debug.log*

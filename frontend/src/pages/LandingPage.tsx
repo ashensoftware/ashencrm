@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Users, Briefcase } from "lucide-react";
+import { AdminAccessTokenForm } from "../organisms/AdminAccessTokenForm";
 
 export function LandingPage() {
   return (
@@ -7,6 +8,7 @@ export function LandingPage() {
       <div className="landing-inner">
         <img src="/logo-horizontal.png" alt="Ashen" className="landing-logo" />
         <p className="landing-tagline">Elige un área de trabajo</p>
+        <AdminAccessTokenForm hint="La sesión queda en esta pestaña. El rol lo asigna Supabase en app_metadata." />
         <div className="landing-actions">
           <Link to="/leads" className="landing-card landing-card-leads">
             <Users size={40} strokeWidth={1.75} aria-hidden />

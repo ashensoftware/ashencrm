@@ -7,7 +7,7 @@ describe("useProspects", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(api, "fetchCatalog").mockResolvedValue([]);
-    vi.spyOn(api, "normalizeCategories").mockResolvedValue(undefined);
+    vi.spyOn(api, "normalizeCategories").mockResolvedValue({ status: 200 } as Response);
     vi.spyOn(api, "fetchProspects").mockResolvedValue([]);
     vi.spyOn(api, "fetchHexagons").mockResolvedValue([]);
     vi.spyOn(api, "fetchStats").mockResolvedValue({});

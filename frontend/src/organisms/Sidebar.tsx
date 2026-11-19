@@ -12,8 +12,8 @@ interface Props {
   catalog: CatalogItem[];
   filters: ProspectFilters;
   selectedProspect: Prospect | null;
-  currentView: "overview" | "map" | "tinder" | "panel" | "todo" | "admin";
-  onViewChange: (v: "overview" | "map" | "tinder" | "panel" | "todo" | "admin") => void;
+  currentView: "overview" | "map" | "tinder" | "panel" | "todo" | "admin" | "runs";
+  onViewChange: (v: "overview" | "map" | "tinder" | "panel" | "todo" | "admin" | "runs") => void;
   homeLink?: ReactNode;
   optionsOpen?: boolean;
   registryOpen?: boolean;
@@ -31,7 +31,7 @@ interface Props {
 }
 
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 export function Sidebar({
   stats,
@@ -46,6 +46,7 @@ export function Sidebar({
   defaultScrapeLimit,
   homeLink,
 }: Props) {
+  const { pathname } = useLocation();
   return (
     <>
     <aside className="sidebar">
@@ -91,6 +92,13 @@ export function Sidebar({
           style={{ width: '100%', justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
         >
           <BarChart2 size={18} /> Pipeline
+        </button>
+        <button
+          className={pathname === "/leads/runs" ? "btn-primary" : "btn-secondary"}
+          onClick={() => onViewChange("runs")}
+          style={{ width: "100%", justifyContent: "flex-start", display: "flex", alignItems: "center", gap: "0.5rem" }}
+        >
+          <ClipboardList size={18} /> Ejecuciones
         </button>
 
         <button 

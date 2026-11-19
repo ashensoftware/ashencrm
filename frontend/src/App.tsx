@@ -1,6 +1,6 @@
 import { useMemo, lazy, Suspense } from "react";
 import type { Prospect } from "./types";
-import { Routes, Route, useNavigate, useLocation, Navigate, Link } from "react-router-dom";
+import { Routes, Route, Outlet, useNavigate, useLocation, Navigate, Link } from "react-router-dom";
 import { Sidebar } from "./organisms/Sidebar";
 import { ClientsSidebar } from "./organisms/ClientsSidebar";
 import { ProspectDetailModal } from "./organisms/modals/ProspectDetailModal";
@@ -14,7 +14,9 @@ import { useAppSettings } from "./hooks/useAppSettings";
 import { updateProspect, sendWhatsApp, deleteProspectById } from "./api";
 import { MSG, LABELS } from "./constants";
 import { AdminAccessTokenForm } from "./organisms/AdminAccessTokenForm";
+import { RequireAuth } from "./auth/RequireAuth";
 import { PipelineRunsPage } from "./pages/PipelineRunsPage";
+import { accessToken } from "./api";
 
 const MapView = lazy(() => import("./organisms/MapView").then((m) => ({ default: m.MapView })));
 const TinderPage = lazy(() => import("./pages").then((m) => ({ default: m.TinderPage })));
@@ -58,8 +60,9 @@ function resolveLeadsSidebarView(
 function App() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const showLeadsSidebar = pathname.startsWith("/leads");
-  const showClientsSidebar = pathname.startsWith("/clientes");
+  const signedIn = Boolean(accessToken());
+  const showLeadsSidebar = signedIn && pathname.startsWith("/leads");
+  const showClientsSidebar = signedIn && pathname.startsWith("/clientes");
   const currentLeadsView = useMemo(() => {
     if (!pathname.startsWith("/leads")) return null;
     return resolveLeadsSidebarView(pathname);
@@ -151,108 +154,116 @@ function App() {
         >
           <Routes>
             <Route path="/" element={<LandingPage />} />
-            <Route path="/leads" element={<DashboardPage prospects={prospects} />} />
             <Route
-              path="/leads/map"
               element={
-                <MapView
-                  prospects={prospects}
-                  hexagons={hexagons}
-                  selectedProspect={selectedProspect}
-                  onHexClick={actions.handleHexClick}
-                  mapCenter={
-                    appSettings
-                      ? { lat: appSettings.map_center_lat, lng: appSettings.map_center_lng }
-                      : undefined
-                  }
-                  mapZoom={appSettings?.map_zoom}
-                />
+                <RequireAuth>
+                  <Outlet />
+                </RequireAuth>
               }
-            />
-            <Route
-              path="/leads/tinder"
-              element={
-                <TinderPage
-                  prospect={selectedProspect}
-                  mode={actions.tinderMode}
-                  onModeChange={actions.setTinderMode}
-                  onClose={() => {
-                    modals.setModal(null);
-                    navigate("/leads/panel");
-                  }}
-                  onReject={() => actions.handleReview("reject")}
-                  onAccept={actions.handleTinderAccept}
-                  onContact={() => actions.handleReview("contact")}
-                  onNext={actions.handleTinderNext}
-                  onPrev={actions.handleTinderPrev}
-                  hasPrev={actions.tinderHistory.length > 0}
-                  onAdvanceStatus={actions.handleAdvanceStatus}
-                  onGenerateDemo={actions.handleGenerateDemo}
-                  onWhatsApp={actions.handleWhatsApp}
-                />
-              }
-            />
-            <Route
-              path="/leads/kanban"
-              element={
-                <KanbanPage
-                  prospects={prospects}
-                  onSelectProspect={(p) => {
-                    setSelectedProspect(p);
-                    modals.setModal("detail");
-                  }}
-                  onWhatsApp={async (p) => {
-                    const result = await sendWhatsApp(p.name);
-                    modals.showAlert(
-                      "WhatsApp",
-                      result?.dry_run ? result.message || MSG.WHATSAPP_DRY_RUN : MSG.WHATSAPP_SENDING
-                    );
-                  }}
-                  onChangeStatus={async (name, status) => {
-                    const r = await updateProspect(name, { status });
-                    if (r.ok) await refresh();
-                  }}
-                />
-              }
-            />
-            <Route
-              path="/leads/panel"
-              element={
-                <PanelPage
-                  prospects={prospects}
-                  filters={filters}
-                  catalog={catalog}
-                  onFiltersChange={setFilters}
-                  onAddProspect={() => modals.setModal("add")}
-                  onSelectProspect={(p) => {
-                    setSelectedProspect(p);
-                    modals.setModal("detail");
-                  }}
-                  onDeleteProspect={handleDeleteProspect}
-                />
-              }
-            />
-            <Route
-              path="/leads/admin"
-              element={
-                <AdminPage
-                  catalog={catalog}
-                  refreshCatalog={refreshCatalog}
-                  refreshProspects={() => refresh()}
-                  onSettingsSaved={reloadAppSettings}
-                />
-              }
-            />
-            <Route path="/leads/runs" element={<PipelineRunsPage />} />
+            >
+              <Route path="/leads" element={<DashboardPage prospects={prospects} />} />
+              <Route
+                path="/leads/map"
+                element={
+                  <MapView
+                    prospects={prospects}
+                    hexagons={hexagons}
+                    selectedProspect={selectedProspect}
+                    onHexClick={actions.handleHexClick}
+                    mapCenter={
+                      appSettings
+                        ? { lat: appSettings.map_center_lat, lng: appSettings.map_center_lng }
+                        : undefined
+                    }
+                    mapZoom={appSettings?.map_zoom}
+                  />
+                }
+              />
+              <Route
+                path="/leads/tinder"
+                element={
+                  <TinderPage
+                    prospect={selectedProspect}
+                    mode={actions.tinderMode}
+                    onModeChange={actions.setTinderMode}
+                    onClose={() => {
+                      modals.setModal(null);
+                      navigate("/leads/panel");
+                    }}
+                    onReject={() => actions.handleReview("reject")}
+                    onAccept={actions.handleTinderAccept}
+                    onContact={() => actions.handleReview("contact")}
+                    onNext={actions.handleTinderNext}
+                    onPrev={actions.handleTinderPrev}
+                    hasPrev={actions.tinderHistory.length > 0}
+                    onAdvanceStatus={actions.handleAdvanceStatus}
+                    onGenerateDemo={actions.handleGenerateDemo}
+                    onWhatsApp={actions.handleWhatsApp}
+                  />
+                }
+              />
+              <Route
+                path="/leads/kanban"
+                element={
+                  <KanbanPage
+                    prospects={prospects}
+                    onSelectProspect={(p) => {
+                      setSelectedProspect(p);
+                      modals.setModal("detail");
+                    }}
+                    onWhatsApp={async (p) => {
+                      const result = await sendWhatsApp(p.name);
+                      modals.showAlert(
+                        "WhatsApp",
+                        result?.dry_run ? result.message || MSG.WHATSAPP_DRY_RUN : MSG.WHATSAPP_SENDING
+                      );
+                    }}
+                    onChangeStatus={async (name, status) => {
+                      const r = await updateProspect(name, { status });
+                      if (r.ok) await refresh();
+                    }}
+                  />
+                }
+              />
+              <Route
+                path="/leads/panel"
+                element={
+                  <PanelPage
+                    prospects={prospects}
+                    filters={filters}
+                    catalog={catalog}
+                    onFiltersChange={setFilters}
+                    onAddProspect={() => modals.setModal("add")}
+                    onSelectProspect={(p) => {
+                      setSelectedProspect(p);
+                      modals.setModal("detail");
+                    }}
+                    onDeleteProspect={handleDeleteProspect}
+                  />
+                }
+              />
+              <Route
+                path="/leads/admin"
+                element={
+                  <AdminPage
+                    catalog={catalog}
+                    refreshCatalog={refreshCatalog}
+                    refreshProspects={() => refresh()}
+                    onSettingsSaved={reloadAppSettings}
+                  />
+                }
+              />
+              <Route path="/leads/runs" element={<PipelineRunsPage />} />
 
-            <Route path="/clientes" element={<ClientsDashboardPage />} />
-            <Route path="/clientes/mapa" element={<ClientsMapPage />} />
-            <Route path="/clientes/gestion" element={<ClientsManagementPage />} />
-            <Route path="/clientes/pipeline" element={<ClientsPipelinePage />} />
-            <Route
-              path="/clientes/admin"
-              element={<ClientsAdminPage onSettingsSaved={reloadAppSettings} />}
-            />
+              <Route path="/clientes" element={<ClientsDashboardPage />} />
+              <Route path="/clientes/mapa" element={<ClientsMapPage />} />
+              <Route path="/clientes/gestion" element={<ClientsManagementPage />} />
+              <Route path="/clientes/pipeline" element={<ClientsPipelinePage />} />
+              <Route
+                path="/clientes/admin"
+                element={<ClientsAdminPage onSettingsSaved={reloadAppSettings} />}
+              />
+            </Route>
 
             <Route path="/map" element={<Navigate to="/leads/map" replace />} />
             <Route path="/panel" element={<Navigate to="/leads/panel" replace />} />
@@ -260,7 +271,7 @@ function App() {
             <Route path="/kanban" element={<Navigate to="/leads/kanban" replace />} />
             <Route path="/admin" element={<Navigate to="/leads/admin" replace />} />
 
-            <Route path="*" element={<Navigate to="/leads" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
       </main>

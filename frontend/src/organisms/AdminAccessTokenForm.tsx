@@ -17,11 +17,12 @@ export function AdminAccessTokenForm({ hint }: Props) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [showToken, setShowToken] = useState(!supabaseConfigured);
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     storeAccessToken(value);
-    window.location.reload();
+    window.location.assign("/leads");
   };
 
   const onPassword = async (event: FormEvent) => {
@@ -36,19 +37,10 @@ export function AdminAccessTokenForm({ hint }: Props) {
   };
 
   return (
-    <div>
+    <div className="auth-panel">
       {supabaseConfigured && (
-        <form
-          onSubmit={onPassword}
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "0.5rem",
-            alignItems: "flex-end",
-            marginTop: "0.75rem",
-          }}
-        >
-          <div className="filter-group" style={{ minWidth: "14rem", flex: 1 }}>
+        <form onSubmit={onPassword} className="auth-form">
+          <div className="filter-group">
             <label htmlFor={emailId}>Correo</label>
             <input
               id={emailId}
@@ -60,7 +52,7 @@ export function AdminAccessTokenForm({ hint }: Props) {
               required
             />
           </div>
-          <div className="filter-group" style={{ minWidth: "14rem", flex: 1 }}>
+          <div className="filter-group">
             <label htmlFor={passwordId}>Contraseña</label>
             <input
               id={passwordId}
@@ -72,45 +64,41 @@ export function AdminAccessTokenForm({ hint }: Props) {
               required
             />
           </div>
-          <button type="submit" className="btn-primary">
+          <button type="submit" className="btn-primary auth-submit">
             Entrar
           </button>
-          {error && (
-            <p style={{ margin: 0, flexBasis: "100%", color: "var(--danger, #b42318)" }}>{error}</p>
-          )}
+          {error && <p className="auth-error">{error}</p>}
         </form>
       )}
-    <form
-      onSubmit={onSubmit}
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        gap: "0.5rem",
-        alignItems: "flex-end",
-        marginTop: "0.75rem",
-      }}
-    >
-      <div className="filter-group" style={{ minWidth: "16rem", flex: 1 }}>
-        <label htmlFor={tokenId}>Token de acceso (Bearer)</label>
-        <input
-          id={tokenId}
-          className="search-input"
-          type="password"
-          autoComplete="off"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          placeholder="JWT local. No es una contraseña."
-        />
-      </div>
-      <button type="submit" className="btn-primary">
-        Usar token
+
+      <button
+        type="button"
+        className="auth-toggle"
+        onClick={() => setShowToken((open) => !open)}
+      >
+        {showToken ? "Ocultar acceso con token" : "Usar token de acceso"}
       </button>
-      {hint && (
-        <p style={{ margin: 0, flexBasis: "100%", color: "var(--text-muted)", fontSize: "0.85rem" }}>
-          {hint}
-        </p>
+
+      {showToken && (
+        <form onSubmit={onSubmit} className="auth-form">
+          <div className="filter-group">
+            <label htmlFor={tokenId}>Token de acceso (Bearer)</label>
+            <input
+              id={tokenId}
+              className="search-input"
+              type="password"
+              autoComplete="off"
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+              placeholder="JWT. No es una contraseña."
+            />
+          </div>
+          <button type="submit" className="btn-primary auth-submit">
+            Usar token
+          </button>
+          {hint && <p className="auth-hint">{hint}</p>}
+        </form>
       )}
-    </form>
     </div>
   );
 }

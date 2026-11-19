@@ -1,0 +1,71 @@
+#!/bin/bash
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y python3 python3-venv python3-pip git curl
+
+install -d -o root -g root /opt/ashencrm
+if [ ! -d /opt/ashencrm/repo/.git ]; then
+  git clone --depth 1 --branch "${git_branch}" "${git_repo}" /opt/ashencrm/repo
+else
+  cd /opt/ashencrm/repo
+  git fetch --depth 1 origin "${git_branch}"
+  git checkout -B "${git_branch}" "origin/${git_branch}"
+fi
+
+cd /opt/ashencrm/repo
+python3 -m venv /opt/ashencrm/venv
+/opt/ashencrm/venv/bin/pip install --upgrade pip
+/opt/ashencrm/venv/bin/pip install -e .
+
+ACCESS_TOKEN=$(curl -s -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+
+fetch_secret() {
+  local name="$1"
+  curl -s -H "Authorization: Bearer $${ACCESS_TOKEN}" \
+    "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/$${name}/versions/latest:access" \
+    | python3 -c 'import sys,json,base64; print(base64.b64decode(json.load(sys.stdin)["payload"]["data"]).decode())'
+}
+
+cat >/opt/ashencrm/repo/.env <<EOF
+APP_ENV=production
+AUTH_MODE=oidc
+ALLOWED_ORIGINS=${allowed_origins}
+SUPABASE_URL=$(fetch_secret ashencrm-supabase-url)
+SUPABASE_PUBLISHABLE_KEY=$(fetch_secret ashencrm-supabase-publishable-key)
+SUPABASE_SECRET_KEY=$(fetch_secret ashencrm-supabase-secret-key)
+SUPABASE_JWKS_URL=$(fetch_secret ashencrm-supabase-jwks-url)
+OIDC_ISSUER=$(fetch_secret ashencrm-supabase-url)/auth/v1
+OIDC_AUDIENCE=authenticated
+OIDC_JWKS_URL=$(fetch_secret ashencrm-supabase-jwks-url)
+PLATFORM_SECRET_KEY=$(fetch_secret ashencrm-platform-secret-key)
+OUTREACH_ENABLED=false
+DISCOVERY_PROVIDER=simulated
+LEGACY_MAPS_SCRAPER_ENABLED=0
+LOVABLE_BROWSER_AUTOMATION_ENABLED=0
+EOF
+chmod 600 /opt/ashencrm/repo/.env
+
+cat >/etc/systemd/system/ashencrm.service <<'UNIT'
+[Unit]
+Description=AshenCRM FastAPI + worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ashencrm/repo
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/ashencrm/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable ashencrm
+systemctl restart ashencrm

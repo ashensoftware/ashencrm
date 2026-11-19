@@ -4,6 +4,15 @@
 !.env.example
 .vercel/
 .venv/
+
+# Terraform
+infra/gcp/.terraform/
+infra/gcp/.terraform.lock.hcl
+infra/gcp/terraform.tfstate
+infra/gcp/terraform.tfstate.*
+infra/gcp/terraform.tfvars
+infra/gcp/*.auto.tfvars
+infra/gcp/crash.log
 __pycache__/
 *.pyc
 *.egg-info/
@@ -39,3 +48,5 @@ yarn-debug.log*
 yarn-error.log*
 .eslintcache
 .DS_Store
+.vercel
+.env*

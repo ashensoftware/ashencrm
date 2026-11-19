@@ -1,0 +1,16 @@
+project_id      = "ashencrm-fx"
+billing_account = "013843-943D8D-594C01"
+region          = "us-central1"
+zone            = "us-central1-a"
+budget_amount_cop = 50000
+budget_alert_emails = ["fastex.999@gmail.com"]
+git_repo   = "https://github.com/ashensoftware/ashencrm.git"
+git_branch = "main"
+allowed_origins = "https://ashencrm.vercel.app,https://ashencrm-delta.vercel.app,http://localhost:5173"
+
+# Copia a terraform.tfvars (gitignored) y completa. No subas secretos.
+supabase_url             = "https://YOUR_PROJECT.supabase.co"
+supabase_publishable_key = "sb_publishable_..."
+supabase_secret_key      = "sb_secret_..."
+supabase_jwks_url        = "https://YOUR_PROJECT.supabase.co/auth/v1/.well-known/jwks.json"
+platform_secret_key      = ""

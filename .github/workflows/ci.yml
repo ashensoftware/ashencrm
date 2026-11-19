@@ -13,6 +13,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e . ruff
+      - run: python -m playwright install --with-deps chromium
       - run: python -m pytest -q
       - run: python -m ruff check backend/api/authorization.py backend/api/routes/pipeline.py backend/api/routes/providers.py backend/api/routes/demos.py backend/workers backend/core/secrets.py backend/core/ssrf.py backend/domain/identity.py backend/infrastructure/providers backend/infrastructure/persistence/platform_repository.py backend/infrastructure/persistence/sqlite_import.py
 

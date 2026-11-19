@@ -19,6 +19,9 @@ dependencies = [
 testpaths = ["backend/tests"]
 python_files = "test_*.py"
 
+[tool.setuptools.packages.find]
+include = ["backend*"]
+
 [tool.coverage.run]
 source = ["backend"]
 omit = ["backend/tests/*", "backend/scripts/*"]

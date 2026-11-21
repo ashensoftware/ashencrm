@@ -1,8 +1,8 @@
 """Pipeline defaults: env solo para credenciales (OPENAI_*, LOVABLE_ACCOUNTS).
 
 Ajustes operativos (ciudad, delays, WhatsApp, mapa, headless de scrape, etc.)
-se gestionan en la UI Administración y en `app_settings` (SQLite), con fallback
-a los valores por defecto definidos aquí.
+se gestionan en la UI Administración y en `crm.app_settings` (Postgres), con
+fallback a los valores por defecto definidos aquí.
 """
 
 import asyncio
@@ -116,7 +116,20 @@ class Settings:
     )
     platform_secret_key: str = field(default_factory=lambda: os.getenv("PLATFORM_SECRET_KEY", ""))
     google_places_api_key: str = field(default_factory=lambda: os.getenv("GOOGLE_PLACES_API_KEY", ""))
+    # Solo origen de la importación única a Postgres (D4); la app ya no los abre.
     platform_db_path: Path = PROJECT_ROOT / "data" / "db" / "platform.db"
+    # Postgres (Supabase, pooler en modo sesión). DATABASE_URL usa el rol crm_app;
+    # DATABASE_READONLY_URL el rol crm_readonly (consola SQL).
+    database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", "").strip())
+    database_readonly_url: str = field(
+        default_factory=lambda: os.getenv("DATABASE_READONLY_URL", "").strip()
+    )
+    database_schema: str = field(
+        default_factory=lambda: os.getenv("DATABASE_SCHEMA", "crm").strip() or "crm"
+    )
+    database_auto_migrate: bool = field(
+        default_factory=lambda: _env_bool("DATABASE_AUTO_MIGRATE", True)
+    )
     supabase_url: str = field(
         default_factory=lambda: os.getenv("SUPABASE_URL", "").strip().rstrip("/")
     )

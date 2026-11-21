@@ -34,7 +34,7 @@ class Prospect:
     phone: str = ""
     website: str = ""
     rating: float = 0.0
-    reviews_count: int = 0
+    reviews_count: Optional[int] = 0  # None = desconocido (valor implausible anulado)
     maps_url: str = ""
     latitude: float = 0.0
     longitude: float = 0.0
@@ -60,7 +60,7 @@ class Prospect:
 
     def __post_init__(self):
         if not self.scraped_at:
-            self.scraped_at = datetime.now().isoformat()
+            self.scraped_at = datetime.now().astimezone().isoformat()
 
     def has_existing_website(self) -> bool:
         return bool(self.website or self.ig_website)

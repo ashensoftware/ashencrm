@@ -1,12 +1,11 @@
 import pytest
-from pathlib import Path
+
 from backend.domain.prospect import Prospect, ProspectStatus
-from backend.infrastructure.persistence.prospect_repository import ProspectRepository
+
 
 @pytest.fixture
-def repo(tmp_path):
-    db_path = tmp_path / "test_prospects.db"
-    return ProspectRepository(db_path=db_path)
+def repo(prospect_repo):
+    return prospect_repo
 
 def test_insert_and_get_prospect(repo):
     p = Prospect(

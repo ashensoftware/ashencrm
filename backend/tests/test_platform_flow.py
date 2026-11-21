@@ -16,7 +16,6 @@ from backend.core.ssrf import is_safe_public_url
 from backend.domain.identity import canonical_domain, identity_keys, phone_e164
 from backend.domain.prospect import Prospect
 from backend.infrastructure.persistence.platform_repository import POSTGRES_CLAIM_SQL, PlatformRepository
-from backend.infrastructure.persistence.prospect_repository import ProspectRepository
 from backend.infrastructure.persistence.sqlite_import import sqlite_import_plan
 from backend.infrastructure.providers.google_places import GooglePlacesClient, PlacesError
 from backend.infrastructure.providers.lovable_mcp import API_KEY_SUPPORTED, LovableMcpClient
@@ -51,14 +50,14 @@ def test_route_classification():
     assert required_access("POST", "/api/v1/pipeline-runs/abc/cancel") == "runs:cancel"
 
 
-def test_sensitive_routes_require_a_role(tmp_path, monkeypatch):
+def test_sensitive_routes_require_a_role(prospect_repo, platform_repo, monkeypatch):
     monkeypatch.setattr(
         "backend.api.routes.providers.settings.platform_secret_key",
         "master-key-for-tests",
     )
-    repo = ProspectRepository(db_path=tmp_path / "prospects.db")
+    repo = prospect_repo
     repo.insert_prospect(Prospect(name="Cafe Norte", category="cafe", address="Calle 1"))
-    platform = PlatformRepository(tmp_path / "platform.db")
+    platform = platform_repo
     app = create_app(security=_security(), db=repo, platform=platform)
     with TestClient(app) as client:
         assert client.get("/api/livez").status_code == 200
@@ -119,23 +118,18 @@ def test_sensitive_routes_require_a_role(tmp_path, monkeypatch):
         assert client.post("/api/v1/pipeline-runs", json={"campaign_id": "x"}, headers=_headers("viewer")).status_code == 403
 
 
-def test_rate_limiter_and_body_limit(tmp_path):
+def test_rate_limiter_and_body_limit(prospect_repo, platform_repo):
     limiter = RateLimiter(limit=1, window_seconds=60)
     assert limiter.allow("client") is True
     assert limiter.allow("client") is False
-    platform = PlatformRepository(tmp_path / "platform.db")
-    app = create_app(
-        security=_security(),
-        db=ProspectRepository(db_path=tmp_path / "prospects.db"),
-        platform=platform,
-    )
+    app = create_app(security=_security(), db=prospect_repo, platform=platform_repo)
     with TestClient(app) as client:
         response = client.post("/api/livez", headers={"content-length": "2000000"})
         assert response.status_code == 413
 
 
-def test_job_recovers_without_double_claim(tmp_path):
-    store = PlatformRepository(tmp_path / "platform.db")
+def test_job_recovers_without_double_claim(platform_repo, clean_db):
+    store = platform_repo
     created = store.create_run(
         campaign_id="c1",
         requested_by="operator",
@@ -161,15 +155,15 @@ def test_job_recovers_without_double_claim(tmp_path):
     thread.start()
     thread.join()
     assert results == [None]
-    reopened = PlatformRepository(tmp_path / "platform.db")
+    reopened = PlatformRepository(pool=clean_db)
     assert reopened.recover_expired(now=2_000_000_040, lease_seconds=30) == 1
     reclaimed = reopened.claim_step("worker-c", now=2_000_000_040)
     assert reclaimed["id"] == first["id"]
     assert reclaimed["attempt"] == 2
 
 
-def test_pause_cancel_and_simulated_run_stays_dry(tmp_path):
-    store = PlatformRepository(tmp_path / "jobs.db")
+def test_pause_cancel_and_simulated_run_stays_dry(platform_repo):
+    store = platform_repo
     created = store.create_run(
         campaign_id="c2",
         requested_by="operator",
@@ -209,10 +203,9 @@ def test_pause_cancel_and_simulated_run_stays_dry(tmp_path):
     drain(store)
     assert store.get_run(second["id"])["run"]["status"] == "incomplete"
     assert store.count_businesses() == 1
-    with sqlite3.connect(store.db_path) as conn:
-        dry = conn.execute("SELECT dry_run FROM outreach_messages").fetchall()
+    dry = store.list_outreach_messages()
     assert dry
-    assert all(row[0] == 1 for row in dry)
+    assert all(row["dry_run"] == 1 for row in dry)
     store.set_run_status(second["id"], "cancelled")
     assert store.get_run(second["id"])["run"]["status"] == "cancelled"
 
@@ -268,7 +261,7 @@ def test_sqlite_plan_is_dry_and_postgres_claim_is_explicit(tmp_path):
     plan = sqlite_import_plan(source)
     assert plan["writes"] == 0
     assert plan["tables"]["prospects"] == 1
-    assert "FOR UPDATE SKIP LOCKED" in POSTGRES_CLAIM_SQL
+    assert "FOR UPDATE OF s SKIP LOCKED" in POSTGRES_CLAIM_SQL
 
 
 def test_screenshot_path_stays_inside_repo():

@@ -1,6 +1,6 @@
 """Worker que reclama pasos durables. No envía WhatsApp ni llama a proveedores de pago.
 
-La cola vive en SQLite. Si el proceso muere, el siguiente arranque vuelve a
+La cola vive en Postgres (crm.pipeline_steps). Si el proceso muere, el siguiente arranque vuelve a
 reclamar los pasos cuyo heartbeat venció.
 """
 

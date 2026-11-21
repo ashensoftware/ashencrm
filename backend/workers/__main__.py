@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import threading
 
-from backend.config.settings import settings
+from backend.api.app_factory import prepare_database
 from backend.infrastructure.persistence.platform_repository import PlatformRepository
 from backend.workers.runner import worker_loop
 
 
 def main() -> None:
+    prepare_database()
     stop = threading.Event()
-    store = PlatformRepository(settings.platform_db_path)
+    store = PlatformRepository()
     worker_loop(store, stop)
 
 

@@ -1,20 +1,13 @@
 """SQL console helper on ProspectRepository."""
 
-import tempfile
-from pathlib import Path
-
 import pytest
 
 from backend.infrastructure.persistence.prospect_repository import ProspectRepository
 
 
 @pytest.fixture()
-def repo():
-    # ignore_cleanup_errors: Windows puede retener el lock del .db un instante tras cerrar SQLite
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
-        db_path = Path(tmp) / "t.db"
-        r = ProspectRepository(db_path=db_path)
-        yield r
+def repo(prospect_repo):
+    return prospect_repo
 
 
 def test_execute_sql_console_select(repo: ProspectRepository):
@@ -66,7 +59,7 @@ def test_execute_sql_console_allows_delete_inside_a_string_literal(repo: Prospec
 
 
 def test_execute_sql_console_explain_select(repo: ProspectRepository):
-    out = repo.execute_sql_console("EXPLAIN QUERY PLAN SELECT 1")
+    out = repo.execute_sql_console("EXPLAIN SELECT 1")
     assert out["kind"] == "select"
     assert out["rows"]
 
@@ -75,7 +68,7 @@ def test_rejected_write_is_not_committed(repo: ProspectRepository):
     with pytest.raises(ValueError, match="Sentencia rechazada"):
         repo.execute_sql_console("CREATE TABLE leaked (id INTEGER)")
     out = repo.execute_sql_console(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'leaked'"
+        "SELECT table_name FROM information_schema.tables WHERE table_name = 'leaked'"
     )
     assert out["rows"] == []
 

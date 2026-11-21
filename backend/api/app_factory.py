@@ -28,6 +28,7 @@ from backend.core import config
 from backend.core.auth import HttpJwkProvider, TokenAuthenticator
 from backend.core.security_policy import assert_auth_mode
 from backend.database.db import Database
+from backend.infrastructure.persistence.migrate import run_migrations
 from backend.infrastructure.persistence.platform_repository import PlatformRepository
 from backend.services.scrape_service import ScrapeService
 from backend.workers.runner import worker_loop
@@ -83,6 +84,22 @@ def _validate_runtime(security: RuntimeSecurity, *, jwk_provider: object | None)
     return mode
 
 
+_migrated = False
+
+
+def prepare_database() -> None:
+    """Exige DATABASE_URL y aplica migraciones pendientes una vez por proceso."""
+    global _migrated
+    if not settings.database_url:
+        raise RuntimeError(
+            "DATABASE_URL es obligatoria: el CRM vive en Postgres (schema "
+            f"{settings.database_schema}). No hay respaldo SQLite."
+        )
+    if settings.database_auto_migrate and not _migrated:
+        run_migrations(settings.database_url, settings.database_schema)
+        _migrated = True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     config.setup_windows_asyncio()
@@ -111,6 +128,8 @@ def create_app(
 ) -> FastAPI:
     active = security or runtime_security_from_settings()
     mode = _validate_runtime(active, jwk_provider=jwk_provider)
+    if db is None or platform is None:
+        prepare_database()
     database = db if db is not None else Database()
     provider = jwk_provider
     if provider is None and mode == "oidc":
@@ -123,7 +142,7 @@ def create_app(
         jwk_provider=provider,
     )
 
-    platform_db = platform or PlatformRepository(settings.platform_db_path)
+    platform_db = platform or PlatformRepository()
     app = FastAPI(title="Client Acquisition Dashboard", lifespan=lifespan)
     app.state.security = active
     app.state.authenticator = authenticator

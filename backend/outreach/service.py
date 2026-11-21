@@ -60,7 +60,7 @@ class OutreachService:
                     prospect.address,
                     status=ProspectStatus.CONTACTED,
                     is_contacted=True,
-                    contacted_at=datetime.now().isoformat(),
+                    contacted_at=datetime.now().astimezone().isoformat(),
                 )
                 return {
                     "success": True,

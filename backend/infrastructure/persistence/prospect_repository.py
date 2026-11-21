@@ -1,17 +1,28 @@
-"""SQLite persistence for prospects, categories and health snapshots."""
+"""Postgres persistence for prospects, categories, settings, clients and health snapshots."""
+
+from __future__ import annotations
 
 import csv
 import json
 import re
-import sqlite3
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
+
+import psycopg
+from psycopg import sql
+from psycopg.rows import tuple_row
+from psycopg.types.json import Jsonb
+from psycopg_pool import ConnectionPool
 
 from backend.config.settings import settings
 from backend.domain.prospect import Prospect, ProspectStatus
+from backend.infrastructure.persistence.pg import (
+    get_default_pool,
+    get_readonly_pool,
+    to_api_value,
+)
 
-# (name, label, default_lucide_icon_id) — iconos persistidos en category_catalog.icon
+# (name, label, default_lucide_icon_id). La migración 0001 los inserta.
 DEFAULT_CATEGORIES = [
     ("cafe", "Cafe", "Coffee"),
     ("restaurante", "Restaurante", "UtensilsCrossed"),
@@ -31,14 +42,105 @@ DEFAULT_CATEGORIES = [
     ("otros", "Otros Negocios", "Briefcase"),
 ]
 
-MIGRATION_CATEGORY_DEFAULT_ICONS_V1 = "migration_category_default_icons_v1"
+PROSPECT_COLUMNS = frozenset(
+    {
+        *(f for f in Prospect.__dataclass_fields__ if f != "id"),
+        "google_place_id",
+        "business_photo_path",
+        "business_photo_source",
+        "business_photo_fetched_at",
+        "business_photo_attribution",
+        "legacy_photo_url",
+    }
+)
+
+CLIENT_COLUMNS = (
+    "prospect_id",
+    "display_name",
+    "category",
+    "contact_email",
+    "phone",
+    "notes",
+    "stage",
+    "quote_amount",
+    "quote_currency",
+    "quote_pdf_path",
+    "estimated_delivery_at",
+    "quoted_at",
+    "contract_required",
+    "contract_skipped",
+    "contract_signed_at",
+    "contract_pdf_path",
+    "payment_status",
+    "github_repo_url",
+    "production_domain",
+    "drive_folder_url",
+    "staging_url",
+    "maps_url",
+    "latitude",
+    "longitude",
+)
+
+_TIMESTAMP_COLUMNS = frozenset(
+    {
+        "scraped_at",
+        "contacted_at",
+        "business_photo_fetched_at",
+        "estimated_delivery_at",
+        "quoted_at",
+        "contract_signed_at",
+        "scheduled_at",
+    }
+)
+_BOOL_COLUMNS = frozenset({"is_contacted", "contract_required", "contract_skipped"})
+_JSON_COLUMNS = frozenset({"business_photo_attribution"})
+
+
+def _to_bool(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
+
+
+def _db_value(column: str, value: Any) -> Any:
+    """Adapta valores que la app manda con forma SQLite a los tipos Postgres."""
+    if column in _TIMESTAMP_COLUMNS:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        return value
+    if column in _BOOL_COLUMNS:
+        return False if value is None else _to_bool(value)
+    if column in _JSON_COLUMNS and value is not None:
+        if isinstance(value, str):
+            value = json.loads(value) if value.strip() else None
+        return Jsonb(value) if value is not None else None
+    return value
+
+
+def _checked(columns: Iterable[str], allowed: Iterable[str], table: str) -> list[str]:
+    allowed_set = set(allowed)
+    cols = list(columns)
+    unknown = [c for c in cols if c not in allowed_set]
+    if unknown:
+        raise ValueError(f"Columnas desconocidas en {table}: {', '.join(sorted(unknown))}")
+    return cols
+
+
+def _setting_to_db(raw: str) -> Jsonb:
+    """Objetos y arreglos JSON se guardan como tales; todo lo demás como string JSON."""
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        parsed = None
+    if isinstance(parsed, (dict, list)):
+        return Jsonb(parsed)
+    return Jsonb(str(raw))
 
 
 def _leading_sql_verb(stmt: str) -> str:
     """
     Primer verbo de la sentencia, ignorando líneas vacías y comentarios `--` / `/* */`
-    al inicio. Así un SELECT con comentario previo no se clasifica mal como mutación
-    (SQLite devuelve rowcount -1 en SELECT y la UI mostraba "Filas afectadas: -1").
+    al inicio. Así un SELECT con comentario previo no se clasifica mal como mutación.
     """
     for raw in stmt.splitlines():
         line = raw.strip()
@@ -62,6 +164,7 @@ _SQL_WRITE_VERBS = (
     "INSERT",
     "UPDATE",
     "DELETE",
+    "MERGE",
     "DROP",
     "ALTER",
     "CREATE",
@@ -80,8 +183,30 @@ _SQL_WRITE_VERBS = (
     "TRUNCATE",
     "GRANT",
     "REVOKE",
+    "COPY",
+    "LOCK",
+    "CALL",
+    "LISTEN",
+    "NOTIFY",
+    "DISCARD",
 )
-_SQL_DANGEROUS_FUNCTIONS = ("LOAD_EXTENSION", "WRITEFILE", "READFILE", "EDIT")
+_SQL_DANGEROUS_FUNCTIONS = (
+    "LOAD_EXTENSION",
+    "WRITEFILE",
+    "READFILE",
+    "EDIT",
+    "SET_CONFIG",
+    "PG_READ_FILE",
+    "PG_READ_BINARY_FILE",
+    "PG_LS_DIR",
+    "PG_STAT_FILE",
+    "LO_IMPORT",
+    "LO_EXPORT",
+    "DBLINK",
+    "PG_TERMINATE_BACKEND",
+    "PG_CANCEL_BACKEND",
+    "PG_SLEEP",
+)
 
 
 def _strip_sql_literals_and_comments(stmt: str) -> str:
@@ -91,7 +216,7 @@ def _strip_sql_literals_and_comments(stmt: str) -> str:
 
 
 def assert_sql_console_readonly(stmt: str) -> None:
-    """Rechaza escrituras, DDL y PRAGMA. SELECT 'DELETE' sigue siendo lectura."""
+    """Primer filtro (el segundo es la transacción READ ONLY y el rol crm_readonly)."""
     scrubbed = _strip_sql_literals_and_comments(stmt)
     verb = _leading_sql_verb(stmt)
     if verb not in {"SELECT", "WITH", "EXPLAIN"}:
@@ -105,226 +230,65 @@ def assert_sql_console_readonly(stmt: str) -> None:
         if re.search(rf"\b{function_name}\b", scrubbed, re.IGNORECASE):
             raise ValueError(f"Sentencia rechazada: {function_name} no está permitido")
     if verb == "EXPLAIN":
-        tail = re.sub(r"(?is)^EXPLAIN(\s+QUERY\s+PLAN)?", "", scrubbed).strip()
+        tail = re.sub(r"(?is)^\s*EXPLAIN(\s+QUERY\s+PLAN)?", "", scrubbed).strip()
         inner = _leading_sql_verb(tail)
         if inner not in {"SELECT", "WITH"}:
             raise ValueError("Sentencia rechazada: EXPLAIN solo puede envolver un SELECT")
 
 
 class ProspectRepository:
-    def __init__(self, db_path: Optional[Path] = None):
-        self.db_path = db_path or settings.db_path
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_schema()
+    SQL_CONSOLE_MAX_ROWS = 2000
+    SQL_CONSOLE_TIMEOUT = "5s"
 
-    def _get_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+    def __init__(
+        self,
+        pool: Optional[ConnectionPool] = None,
+        readonly_pool: Optional[ConnectionPool] = None,
+    ):
+        self._pool = pool or get_default_pool()
+        # Sin pool propio usa el principal; la transacción sigue siendo READ ONLY.
+        self._readonly_pool = readonly_pool if pool is not None else (readonly_pool or get_readonly_pool())
 
-    def _conn(self) -> sqlite3.Connection:
-        return self._get_conn()
+    def _conn(self):
+        """Conexión del pool; al salir del `with` hace commit (o rollback si hubo error)."""
+        return self._pool.connection()
 
-    def _init_schema(self) -> None:
-        with self._conn() as conn:
-            conn.executescript("""
-                CREATE TABLE IF NOT EXISTS prospects (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    category TEXT NOT NULL,
-                    address TEXT DEFAULT '',
-                    city TEXT DEFAULT '',
-                    phone TEXT DEFAULT '',
-                    website TEXT DEFAULT '',
-                    rating REAL DEFAULT 0.0,
-                    reviews_count INTEGER DEFAULT 0,
-                    maps_url TEXT DEFAULT '',
-                    latitude REAL DEFAULT 0.0,
-                    longitude REAL DEFAULT 0.0,
-                    instagram_url TEXT DEFAULT '',
-                    instagram_handle TEXT DEFAULT '',
-                    ig_followers INTEGER DEFAULT 0,
-                    ig_bio TEXT DEFAULT '',
-                    ig_email TEXT DEFAULT '',
-                    ig_phone TEXT DEFAULT '',
-                    ig_website TEXT DEFAULT '',
-                    demo_url TEXT DEFAULT '',
-                    demo_rating REAL DEFAULT 0.0,
-                    screenshot_path TEXT DEFAULT '',
-                    lovable_account_used TEXT DEFAULT '',
-                    prompt_used TEXT DEFAULT '',
-                    lovable_prompt TEXT DEFAULT '',
-                    whatsapp_message TEXT DEFAULT '',
-                    status TEXT DEFAULT 'scraped',
-                    scraped_at TEXT DEFAULT '',
-                    contacted_at TEXT DEFAULT '',
-                    is_contacted INTEGER DEFAULT 0,
-                    notes TEXT DEFAULT '',
-                    UNIQUE(name, address)
-                );
-                CREATE TABLE IF NOT EXISTS category_catalog (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE,
-                    label TEXT NOT NULL,
-                    icon TEXT DEFAULT ''
-                );
-                CREATE TABLE IF NOT EXISTS health_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    created_at TEXT NOT NULL,
-                    total INTEGER DEFAULT 0,
-                    rating_gt_0 INTEGER DEFAULT 0,
-                    reviews_gt_0 INTEGER DEFAULT 0,
-                    website_non_empty INTEGER DEFAULT 0,
-                    phone_non_empty INTEGER DEFAULT 0,
-                    instagram_url_non_empty INTEGER DEFAULT 0,
-                    ig_bio_non_empty INTEGER DEFAULT 0,
-                    ig_followers_gt_0 INTEGER DEFAULT 0,
-                    ig_email_non_empty INTEGER DEFAULT 0,
-                    ig_phone_non_empty INTEGER DEFAULT 0
-                );
-                CREATE TABLE IF NOT EXISTS app_settings (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS clients (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    prospect_id INTEGER UNIQUE,
-                    display_name TEXT NOT NULL,
-                    category TEXT DEFAULT '',
-                    contact_email TEXT DEFAULT '',
-                    phone TEXT DEFAULT '',
-                    notes TEXT DEFAULT '',
-                    stage TEXT NOT NULL DEFAULT 'quote_sent',
-                    quote_amount REAL,
-                    quote_currency TEXT DEFAULT 'COP',
-                    quote_pdf_path TEXT DEFAULT '',
-                    estimated_delivery_at TEXT DEFAULT '',
-                    quoted_at TEXT DEFAULT '',
-                    contract_required INTEGER DEFAULT 0,
-                    contract_skipped INTEGER DEFAULT 0,
-                    contract_signed_at TEXT DEFAULT '',
-                    contract_pdf_path TEXT DEFAULT '',
-                    payment_status TEXT DEFAULT 'pending',
-                    github_repo_url TEXT DEFAULT '',
-                    production_domain TEXT DEFAULT '',
-                    drive_folder_url TEXT DEFAULT '',
-                    staging_url TEXT DEFAULT '',
-                    maps_url TEXT DEFAULT '',
-                    latitude REAL DEFAULT 0,
-                    longitude REAL DEFAULT 0,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    FOREIGN KEY (prospect_id) REFERENCES prospects(id) ON DELETE SET NULL
-                );
-                CREATE TABLE IF NOT EXISTS client_meetings (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    client_id INTEGER NOT NULL,
-                    title TEXT DEFAULT '',
-                    scheduled_at TEXT NOT NULL,
-                    duration_min INTEGER DEFAULT 60,
-                    notes TEXT DEFAULT '',
-                    status TEXT DEFAULT 'scheduled',
-                    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
-                );
-                CREATE INDEX IF NOT EXISTS idx_clients_stage ON clients(stage);
-                CREATE INDEX IF NOT EXISTS idx_meetings_client ON client_meetings(client_id);
-            """)
-            cur = conn.execute("SELECT COUNT(*) FROM category_catalog")
-            if cur.fetchone()[0] == 0:
-                conn.executemany(
-                    "INSERT INTO category_catalog (name, label, icon) VALUES (?, ?, ?)",
-                    DEFAULT_CATEGORIES,
-                )
-            self._maybe_backfill_default_category_icons(conn)
-            try:
-                conn.execute(
-                    "ALTER TABLE prospects ADD COLUMN is_contacted INTEGER DEFAULT 0"
-                )
-            except sqlite3.OperationalError:
-                pass
-            try:
-                conn.execute(
-                    "ALTER TABLE prospects ADD COLUMN whatsapp_message TEXT DEFAULT ''"
-                )
-            except sqlite3.OperationalError:
-                pass
-            try:
-                conn.execute(
-                    "ALTER TABLE prospects ADD COLUMN lovable_prompt TEXT DEFAULT ''"
-                )
-            except sqlite3.OperationalError:
-                pass
-            try:
-                conn.execute("ALTER TABLE prospects ADD COLUMN demo_rating REAL DEFAULT 0.0")
-            except sqlite3.OperationalError:
-                pass
-            try:
-                conn.execute("ALTER TABLE clients ADD COLUMN latitude REAL DEFAULT 0")
-            except sqlite3.OperationalError:
-                pass
-            try:
-                conn.execute("ALTER TABLE clients ADD COLUMN longitude REAL DEFAULT 0")
-            except sqlite3.OperationalError:
-                pass
-            conn.commit()
+    def _readonly_pool_or_main(self) -> ConnectionPool:
+        return self._readonly_pool or self._pool
 
-    def _maybe_backfill_default_category_icons(self, conn: sqlite3.Connection) -> None:
-        """Una sola vez: rellena icon Lucide vacío según DEFAULT_CATEGORIES (BD existentes)."""
-        if conn.execute(
-            "SELECT 1 FROM app_settings WHERE key = ?",
-            (MIGRATION_CATEGORY_DEFAULT_ICONS_V1,),
-        ).fetchone():
-            return
-        for name, _label, icon in DEFAULT_CATEGORIES:
-            conn.execute(
-                "UPDATE category_catalog SET icon = ? WHERE name = ? AND (icon IS NULL OR TRIM(icon) = '')",
-                (icon, name),
-            )
-        conn.execute(
-            """
-            INSERT INTO app_settings (key, value, updated_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-            """,
-            (
-                MIGRATION_CATEGORY_DEFAULT_ICONS_V1,
-                "1",
-                datetime.now().isoformat(),
-            ),
-        )
+    # ------------------------------------------------------------ prospects
 
     def exists_by_name_and_address(self, name: str, address: str) -> bool:
         """True si ya hay un lead con la misma clave única (name, address) que en el scrape."""
         with self._conn() as conn:
-            r = conn.execute(
-                "SELECT 1 FROM prospects WHERE name = ? AND address = ? LIMIT 1",
+            row = conn.execute(
+                "SELECT 1 FROM prospects WHERE name = %s AND address = %s LIMIT 1",
                 (name, address),
             ).fetchone()
-            return r is not None
+            return row is not None
 
     def delete_prospect_by_id(self, prospect_id: int) -> bool:
         """Elimina el lead. clients.prospect_id queda NULL por ON DELETE SET NULL."""
         with self._conn() as conn:
-            cur = conn.execute("DELETE FROM prospects WHERE id = ?", (prospect_id,))
-            conn.commit()
+            cur = conn.execute("DELETE FROM prospects WHERE id = %s", (prospect_id,))
             return cur.rowcount > 0
 
     def insert_prospect(self, prospect: Prospect) -> bool:
+        data = prospect.to_dict()
+        data.pop("id", None)
+        cols = _checked(data.keys(), PROSPECT_COLUMNS, "prospects")
+        query = sql.SQL(
+            "INSERT INTO prospects ({cols}) VALUES ({vals}) "
+            "ON CONFLICT (name, address) DO NOTHING RETURNING id"
+        ).format(
+            cols=sql.SQL(", ").join(map(sql.Identifier, cols)),
+            vals=sql.SQL(", ").join(sql.Placeholder() * len(cols)),
+        )
         try:
             with self._conn() as conn:
-                data = prospect.to_dict()
-                data.pop("id", None)
-                cols = ", ".join(data.keys())
-                placeholders = ", ".join(["?"] * len(data))
-                conn.execute(
-                    f"INSERT INTO prospects ({cols }) VALUES ({placeholders })",
-                    list(data.values()),
-                )
-                conn.commit()
-                return True
-        except sqlite3.IntegrityError:
+                row = conn.execute(query, [_db_value(c, data[c]) for c in cols]).fetchone()
+                return row is not None
+        except psycopg.IntegrityError:
             return False
 
     def insert_many(self, prospects: list[Prospect]) -> tuple[int, int]:
@@ -341,35 +305,35 @@ class ProspectRepository:
         has_instagram: Optional[bool] = None,
         limit: Optional[int] = None,
     ) -> list[Prospect]:
-        query = "SELECT * FROM prospects WHERE 1=1"
-        params: list = []
+        query = "SELECT * FROM prospects WHERE true"
+        params: list[Any] = []
         if status:
-            query += " AND status = ?"
+            query += " AND status = %s"
             params.append(status)
         if category:
-            query += " AND category = ?"
+            query += " AND category = %s"
             params.append(category)
         if city:
-            query += " AND city = ?"
+            query += " AND city = %s"
             params.append(city)
         if is_contacted is not None:
-            query += " AND is_contacted = ?"
-            params.append(1 if is_contacted else 0)
+            query += " AND is_contacted = %s"
+            params.append(bool(is_contacted))
         if name_query:
-            query += " AND name LIKE ?"
-            params.append(f"%{name_query }%")
+            query += " AND name ILIKE %s"
+            params.append(f"%{name_query}%")
         if has_instagram is not None:
             if has_instagram:
                 query += " AND instagram_url IS NOT NULL AND instagram_url <> ''"
             else:
                 query += " AND (instagram_url IS NULL OR instagram_url = '')"
-        query += " ORDER BY scraped_at DESC"
+        query += " ORDER BY scraped_at DESC NULLS LAST, id DESC"
         if limit:
-            query += " LIMIT ?"
-            params.append(limit)
+            query += " LIMIT %s"
+            params.append(int(limit))
         with self._conn() as conn:
             rows = conn.execute(query, params).fetchall()
-            return [Prospect.from_dict(dict(r)) for r in rows]
+            return [Prospect.from_dict(r) for r in rows]
 
     def update_status(
         self,
@@ -386,91 +350,55 @@ class ProspectRepository:
             )
         except (ValueError, TypeError):
             status_val = str(status)
-        updates = ["status = ?"]
-        params: list = [status_val]
-        for k, v in kwargs.items():
-            updates.append(f"{k } = ?")
-            params.append(v)
-        params.extend([name, address])
-        with self._conn() as conn:
-            conn.execute(
-                f"UPDATE prospects SET {', '.join (updates )} WHERE name = ? AND address = ?",
-                params,
-            )
-            conn.commit()
+        self._update_prospect(name, address, {"status": status_val, **kwargs})
 
     def patch_prospect(self, name: str, address: str, data: dict) -> None:
         if not data:
             return
-        updates = [f"{k } = ?" for k in data]
-        params = list(data.values()) + [name, address]
-        with self._conn() as conn:
-            conn.execute(
-                f"UPDATE prospects SET {', '.join (updates )} WHERE name = ? AND address = ?",
-                params,
+        self._update_prospect(name, address, data)
+
+    def _update_prospect(self, name: str, address: str, data: dict) -> None:
+        cols = _checked(data.keys(), PROSPECT_COLUMNS, "prospects")
+        query = sql.SQL("UPDATE prospects SET {sets} WHERE name = %s AND address = %s").format(
+            sets=sql.SQL(", ").join(
+                sql.SQL("{} = %s").format(sql.Identifier(c)) for c in cols
             )
-            conn.commit()
+        )
+        params = [_db_value(c, data[c]) for c in cols] + [name, address]
+        with self._conn() as conn:
+            conn.execute(query, params)
 
-    SQL_CONSOLE_MAX_ROWS = 2000
+    def get_random_prospect(
+        self, status: str = "scraped", exclude_name: Optional[str] = None
+    ) -> Optional[Prospect]:
+        query = "SELECT * FROM prospects WHERE status = %s"
+        params: list[Any] = [status]
+        if exclude_name:
+            query += " AND name <> %s"
+            params.append(exclude_name)
+        query += " ORDER BY random() LIMIT 1"
+        with self._conn() as conn:
+            row = conn.execute(query, params).fetchone()
+            return Prospect.from_dict(row) if row else None
 
-    def execute_sql_console(self, sql: str) -> dict[str, Any]:
-        """Una sola sentencia de lectura. No hace commit."""
-        raw = (sql or "").strip()
-        if not raw:
-            raise ValueError("SQL vacío")
-        stmt = raw.rstrip(";").strip()
-        if not stmt:
-            raise ValueError("SQL vacío")
-        if ";" in stmt:
-            raise ValueError("Solo una sentencia a la vez (sin punto y coma interior)")
-        assert_sql_console_readonly(stmt)
+    def get_prospect_id_by_name(self, name: str) -> Optional[int]:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT id FROM prospects WHERE name = %s ORDER BY id LIMIT 1", (name,)
+            ).fetchone()
+            return int(row["id"]) if row else None
 
-        def row_to_dict(description: list, row: sqlite3.Row) -> dict[str, Any]:
-            out: dict[str, Any] = {}
-            for i, col in enumerate(description):
-                v = row[i]
-                if isinstance(v, bytes):
-                    v = v.decode("utf-8", errors="replace")
-                out[col] = v
-            return out
-
-        conn = self._get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(stmt)
-            desc = [d[0] for d in (cur.description or [])]
-            rows_out: list[dict[str, Any]] = []
-            cap = self.SQL_CONSOLE_MAX_ROWS
-            while len(rows_out) < cap:
-                chunk = cur.fetchmany(min(500, cap - len(rows_out)))
-                if not chunk:
-                    break
-                for row in chunk:
-                    rows_out.append(row_to_dict(desc, row))
-            truncated = False
-            if len(rows_out) == cap:
-                extra = cur.fetchone()
-                truncated = extra is not None
-            conn.rollback()
-            return {
-                "kind": "select",
-                "columns": desc,
-                "rows": rows_out,
-                "rowcount": len(rows_out),
-                "truncated": truncated,
-            }
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+    def get_prospect_by_id(self, prospect_id: int) -> Optional[Prospect]:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM prospects WHERE id = %s", (prospect_id,)).fetchone()
+            return Prospect.from_dict(row) if row else None
 
     def count_by_status(self) -> dict[str, int]:
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT status, COUNT(*) as count FROM prospects GROUP BY status"
+                "SELECT status, COUNT(*) AS count FROM prospects GROUP BY status"
             ).fetchall()
-            return {r["status"]: r["count"] for r in rows}
+            return {r["status"]: int(r["count"]) for r in rows}
 
     def get_categories(self) -> list[str]:
         with self._conn() as conn:
@@ -482,140 +410,10 @@ class ProspectRepository:
     def get_cities(self) -> list[str]:
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT DISTINCT city FROM prospects WHERE city IS NOT NULL AND city <> '' ORDER BY city"
+                "SELECT DISTINCT city FROM prospects "
+                "WHERE city IS NOT NULL AND city <> '' ORDER BY city"
             ).fetchall()
             return [r["city"] for r in rows]
-
-    def normalize_categories(self) -> None:
-        catalog = self.get_catalog_categories()
-        with self._conn() as conn:
-            for cat in catalog:
-                name = cat["name"]
-                label = cat.get("label", "")
-                label_clean = label.split(" ", 1)[-1].strip().lower() if label else name
-                conn.execute(
-                    "UPDATE prospects SET category = ? WHERE LOWER(category) = ? OR LOWER(category) = ?",
-                    (name, name, label_clean),
-                )
-            conn.commit()
-
-    def update_category(self, old_name: str, new_name: str) -> None:
-        with self._conn() as conn:
-            conn.execute(
-                "UPDATE prospects SET category = ? WHERE category = ?",
-                (new_name, old_name),
-            )
-            conn.commit()
-
-    def rename_category_globally(self, old_name: str, new_name: str) -> None:
-        """Rename catalog id and all prospect rows using that category (transactional)."""
-        if not old_name or not new_name or old_name == new_name:
-            raise ValueError("Nombres invalidos")
-        with self._conn() as conn:
-            cat = conn.execute(
-                "SELECT 1 FROM category_catalog WHERE name = ?", (old_name,)
-            ).fetchone()
-            if not cat:
-                raise ValueError("La categoria no existe en el catalogo")
-            taken = conn.execute(
-                "SELECT 1 FROM category_catalog WHERE name = ?", (new_name,)
-            ).fetchone()
-            if taken:
-                raise ValueError("Ya existe una categoria con ese id")
-            conn.execute(
-                "UPDATE prospects SET category = ? WHERE category = ?",
-                (new_name, old_name),
-            )
-            conn.execute(
-                "UPDATE category_catalog SET name = ? WHERE name = ?",
-                (new_name, old_name),
-            )
-            conn.commit()
-
-    def patch_catalog_category(
-        self, name: str, label: Optional[str] = None, icon: Optional[str] = None
-    ) -> bool:
-        if label is None and icon is None:
-            return False
-        sets: list[str] = []
-        params: list = []
-        if label is not None:
-            sets.append("label = ?")
-            params.append(label)
-        if icon is not None:
-            sets.append("icon = ?")
-            params.append(icon)
-        params.append(name)
-        with self._conn() as conn:
-            cur = conn.execute(
-                f"UPDATE category_catalog SET {', '.join(sets)} WHERE name = ?",
-                params,
-            )
-            conn.commit()
-            return cur.rowcount > 0
-
-    def get_app_settings_raw(self) -> dict[str, str]:
-        with self._conn() as conn:
-            rows = conn.execute("SELECT key, value FROM app_settings").fetchall()
-            return {str(r["key"]): str(r["value"]) for r in rows}
-
-    def upsert_app_settings(self, partial: dict[str, str]) -> None:
-        if not partial:
-            return
-        now = datetime.now().isoformat()
-        with self._conn() as conn:
-            for k, v in partial.items():
-                conn.execute(
-                    """
-                    INSERT INTO app_settings (key, value, updated_at)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(key) DO UPDATE SET
-                        value = excluded.value,
-                        updated_at = excluded.updated_at
-                    """,
-                    (k, v, now),
-                )
-            conn.commit()
-
-    def delete_category(self, category: str) -> None:
-        with self._conn() as conn:
-            conn.execute(
-                "UPDATE prospects SET category = 'Sin categoría' WHERE category = ?",
-                (category,),
-            )
-            conn.commit()
-
-    def get_catalog_categories(self) -> list[dict]:
-        with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT name, label, icon FROM category_catalog ORDER BY label"
-            ).fetchall()
-            return [dict(r) for r in rows]
-
-    def add_catalog_category(self, name: str, label: str, icon: str = "") -> None:
-        with self._conn() as conn:
-            conn.execute(
-                "INSERT INTO category_catalog (name, label, icon) VALUES (?, ?, ?)",
-                (name, label, icon),
-            )
-            conn.commit()
-
-    def delete_catalog_category(self, name: str) -> None:
-        with self._conn() as conn:
-            conn.execute("DELETE FROM category_catalog WHERE name = ?", (name,))
-            conn.commit()
-
-    def get_random_prospect(self, status: str = "scraped", exclude_name: Optional[str] = None) -> Optional[Prospect]:
-        with self._conn() as conn:
-            query = "SELECT * FROM prospects WHERE status = ?"
-            params = [status]
-            if exclude_name:
-                query += " AND name != ?"
-                params.append(exclude_name)
-            query += " ORDER BY RANDOM() LIMIT 1"
-            
-            row = conn.execute(query, params).fetchone()
-            return Prospect.from_dict(dict(row)) if row else None
 
     def compute_lead_score(self, p: Prospect) -> int:
         score = 0
@@ -631,78 +429,212 @@ class ProspectRepository:
             score += 10
         if p.ig_bio:
             score += 5
-        if p.rating > 0:
+        if (p.rating or 0) > 0:
             score += 10
-        if p.reviews_count > 0:
+        if (p.reviews_count or 0) > 0:
             score += 10
         return min(score, 100)
 
+    # ------------------------------------------------------------ SQL console
+
+    def execute_sql_console(self, sql_text: str) -> dict[str, Any]:
+        """Una sola sentencia de lectura, en transacción READ ONLY con timeout, siempre rollback."""
+        raw = (sql_text or "").strip()
+        if not raw:
+            raise ValueError("SQL vacío")
+        stmt = raw.rstrip(";").strip()
+        if not stmt:
+            raise ValueError("SQL vacío")
+        if ";" in stmt:
+            raise ValueError("Solo una sentencia a la vez (sin punto y coma interior)")
+        assert_sql_console_readonly(stmt)
+
+        pool = self._readonly_pool_or_main()
+        cap = self.SQL_CONSOLE_MAX_ROWS
+        with pool.connection() as conn:
+            with conn.transaction(force_rollback=True):
+                conn.execute("SET TRANSACTION READ ONLY")
+                conn.execute(f"SET LOCAL statement_timeout = '{self.SQL_CONSOLE_TIMEOUT}'")
+                cur = conn.cursor(row_factory=tuple_row)
+                # Sin parámetros psycopg no interpreta '%', así que LIKE '%x%' funciona.
+                cur.execute(stmt, prepare=False)  # type: ignore[arg-type]
+                desc = [d.name for d in (cur.description or [])]
+                rows_out: list[dict[str, Any]] = []
+                while len(rows_out) < cap:
+                    chunk = cur.fetchmany(min(500, cap - len(rows_out)))
+                    if not chunk:
+                        break
+                    for row in chunk:
+                        rows_out.append({col: to_api_value(v) for col, v in zip(desc, row)})
+                truncated = len(rows_out) == cap and cur.fetchone() is not None
+        return {
+            "kind": "select",
+            "columns": desc,
+            "rows": rows_out,
+            "rowcount": len(rows_out),
+            "truncated": truncated,
+        }
+
+    # ------------------------------------------------------------ categories
+
+    def normalize_categories(self) -> None:
+        catalog = self.get_catalog_categories()
+        with self._conn() as conn:
+            for cat in catalog:
+                name = cat["name"]
+                label = cat.get("label", "")
+                label_clean = label.split(" ", 1)[-1].strip().lower() if label else name
+                conn.execute(
+                    "UPDATE prospects SET category = %s "
+                    "WHERE category <> %s AND (lower(category) = %s OR lower(category) = %s)",
+                    (name, name, name, label_clean),
+                )
+
+    def update_category(self, old_name: str, new_name: str) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE prospects SET category = %s WHERE category = %s",
+                (new_name, old_name),
+            )
+
+    def rename_category_globally(self, old_name: str, new_name: str) -> None:
+        """Rename catalog id and all prospect rows using that category (transactional)."""
+        if not old_name or not new_name or old_name == new_name:
+            raise ValueError("Nombres invalidos")
+        with self._conn() as conn:
+            cat = conn.execute(
+                "SELECT 1 FROM category_catalog WHERE name = %s FOR UPDATE", (old_name,)
+            ).fetchone()
+            if not cat:
+                raise ValueError("La categoria no existe en el catalogo")
+            taken = conn.execute(
+                "SELECT 1 FROM category_catalog WHERE name = %s", (new_name,)
+            ).fetchone()
+            if taken:
+                raise ValueError("Ya existe una categoria con ese id")
+            conn.execute(
+                "UPDATE prospects SET category = %s WHERE category = %s",
+                (new_name, old_name),
+            )
+            conn.execute(
+                "UPDATE category_catalog SET name = %s WHERE name = %s",
+                (new_name, old_name),
+            )
+
+    def patch_catalog_category(
+        self, name: str, label: Optional[str] = None, icon: Optional[str] = None
+    ) -> bool:
+        if label is None and icon is None:
+            return False
+        sets: list[str] = []
+        params: list[Any] = []
+        if label is not None:
+            sets.append("label = %s")
+            params.append(label)
+        if icon is not None:
+            sets.append("icon = %s")
+            params.append(icon)
+        params.append(name)
+        with self._conn() as conn:
+            cur = conn.execute(
+                f"UPDATE category_catalog SET {', '.join(sets)} WHERE name = %s",
+                params,
+            )
+            return cur.rowcount > 0
+
+    def delete_category(self, category: str) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE prospects SET category = 'Sin categoría' WHERE category = %s",
+                (category,),
+            )
+
+    def get_catalog_categories(self) -> list[dict]:
+        with self._conn() as conn:
+            return conn.execute(
+                "SELECT name, label, icon FROM category_catalog ORDER BY label"
+            ).fetchall()
+
+    def add_catalog_category(self, name: str, label: str, icon: str = "") -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO category_catalog (name, label, icon) VALUES (%s, %s, %s)",
+                (name, label, icon),
+            )
+
+    def delete_catalog_category(self, name: str) -> None:
+        with self._conn() as conn:
+            conn.execute("DELETE FROM category_catalog WHERE name = %s", (name,))
+
+    # ------------------------------------------------------------ settings
+
+    def get_app_settings_raw(self) -> dict[str, str]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT key, CASE WHEN jsonb_typeof(value) = 'string' "
+                "THEN value #>> '{}' ELSE value::text END AS value FROM app_settings"
+            ).fetchall()
+            return {str(r["key"]): str(r["value"]) for r in rows}
+
+    def upsert_app_settings(self, partial: dict[str, str]) -> None:
+        if not partial:
+            return
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.executemany(
+                    """
+                    INSERT INTO app_settings (key, value, updated_at)
+                    VALUES (%s, %s, now())
+                    ON CONFLICT (key) DO UPDATE SET
+                        value = EXCLUDED.value,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    [(k, _setting_to_db(v)) for k, v in partial.items()],
+                )
+
+    # ------------------------------------------------------------ health
+
     def get_health_snapshot(self) -> dict:
         with self._conn() as conn:
-
-            def q(s):
-                return conn.execute(s).fetchone()[0]
-
-            return {
-                "created_at": datetime.now().isoformat(),
-                "total": q("SELECT COUNT(*) FROM prospects"),
-                "rating_gt_0": q("SELECT COUNT(*) FROM prospects WHERE rating > 0"),
-                "reviews_gt_0": q(
-                    "SELECT COUNT(*) FROM prospects WHERE reviews_count > 0"
-                ),
-                "website_non_empty": q(
-                    "SELECT COUNT(*) FROM prospects WHERE COALESCE(website,'')<>''"
-                ),
-                "phone_non_empty": q(
-                    "SELECT COUNT(*) FROM prospects WHERE COALESCE(phone,'')<>''"
-                ),
-                "instagram_url_non_empty": q(
-                    "SELECT COUNT(*) FROM prospects WHERE COALESCE(instagram_url,'')<>''"
-                ),
-                "ig_bio_non_empty": q(
-                    "SELECT COUNT(*) FROM prospects WHERE COALESCE(ig_bio,'')<>''"
-                ),
-                "ig_followers_gt_0": q(
-                    "SELECT COUNT(*) FROM prospects WHERE ig_followers > 0"
-                ),
-                "ig_email_non_empty": q(
-                    "SELECT COUNT(*) FROM prospects WHERE COALESCE(ig_email,'')<>''"
-                ),
-                "ig_phone_non_empty": q(
-                    "SELECT COUNT(*) FROM prospects WHERE COALESCE(ig_phone,'')<>''"
-                ),
-            }
+            row = conn.execute(
+                """
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE rating > 0) AS rating_gt_0,
+                    COUNT(*) FILTER (WHERE reviews_count > 0) AS reviews_gt_0,
+                    COUNT(*) FILTER (WHERE COALESCE(website, '') <> '') AS website_non_empty,
+                    COUNT(*) FILTER (WHERE COALESCE(phone, '') <> '') AS phone_non_empty,
+                    COUNT(*) FILTER (WHERE COALESCE(instagram_url, '') <> '') AS instagram_url_non_empty,
+                    COUNT(*) FILTER (WHERE COALESCE(ig_bio, '') <> '') AS ig_bio_non_empty,
+                    COUNT(*) FILTER (WHERE ig_followers > 0) AS ig_followers_gt_0,
+                    COUNT(*) FILTER (WHERE COALESCE(ig_email, '') <> '') AS ig_email_non_empty,
+                    COUNT(*) FILTER (WHERE COALESCE(ig_phone, '') <> '') AS ig_phone_non_empty,
+                    now() AS created_at
+                FROM prospects
+                """
+            ).fetchone()
+        snap = {k: (int(v) if k != "created_at" else v) for k, v in row.items()}
+        return {"created_at": snap.pop("created_at"), **snap}
 
     def record_health_snapshot(self) -> dict:
         snap = self.get_health_snapshot()
-        cols = [
-            "created_at",
-            "total",
-            "rating_gt_0",
-            "reviews_gt_0",
-            "website_non_empty",
-            "phone_non_empty",
-            "instagram_url_non_empty",
-            "ig_bio_non_empty",
-            "ig_followers_gt_0",
-            "ig_email_non_empty",
-            "ig_phone_non_empty",
-        ]
+        cols = list(snap.keys())
+        query = sql.SQL("INSERT INTO health_history ({cols}) VALUES ({vals})").format(
+            cols=sql.SQL(", ").join(map(sql.Identifier, cols)),
+            vals=sql.SQL(", ").join(sql.Placeholder() * len(cols)),
+        )
         with self._conn() as conn:
-            conn.execute(
-                f"INSERT INTO health_history ({','.join (cols )}) VALUES ({','.join ('?'*len (cols ))})",
-                [snap[k] for k in cols],
-            )
-            conn.commit()
+            conn.execute(query, [snap[k] for k in cols])
         return snap
 
     def get_recent_health_history(self, limit: int = 20) -> list[dict]:
         with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT * FROM health_history ORDER BY id DESC LIMIT ?",
-                (limit,),
+            return conn.execute(
+                "SELECT * FROM health_history ORDER BY id DESC LIMIT %s",
+                (int(limit),),
             ).fetchall()
-            return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------ exports
 
     def export_json(self, filepath: Optional[Path] = None, **filters) -> Path:
         prospects = self.get_prospects(**filters)
@@ -724,36 +656,19 @@ class ProspectRepository:
                     writer.writerow(p.to_dict())
         return path
 
-    # --- Clientes (post-venta) ---
-
-    def get_prospect_id_by_name(self, name: str) -> Optional[int]:
-        with self._conn() as conn:
-            row = conn.execute(
-                "SELECT id FROM prospects WHERE name = ? LIMIT 1", (name,)
-            ).fetchone()
-            return int(row["id"]) if row else None
-
-    def get_prospect_by_id(self, prospect_id: int) -> Optional[Prospect]:
-        with self._conn() as conn:
-            row = conn.execute(
-                "SELECT * FROM prospects WHERE id = ?", (prospect_id,)
-            ).fetchone()
-            return Prospect.from_dict(dict(row)) if row else None
+    # ------------------------------------------------------------ clients
 
     def client_exists_for_prospect(self, prospect_id: int) -> bool:
         with self._conn() as conn:
             row = conn.execute(
-                "SELECT 1 FROM clients WHERE prospect_id = ? LIMIT 1",
+                "SELECT 1 FROM clients WHERE prospect_id = %s LIMIT 1",
                 (prospect_id,),
             ).fetchone()
             return row is not None
 
     def list_clients(self) -> list[dict]:
         with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT * FROM clients ORDER BY datetime(updated_at) DESC"
-            ).fetchall()
-            return [dict(r) for r in rows]
+            return conn.execute("SELECT * FROM clients ORDER BY updated_at DESC").fetchall()
 
     def list_clients_map_markers(self) -> list[dict]:
         """Clientes con coordenadas: propias o heredadas del lead vinculado."""
@@ -794,181 +709,108 @@ class ProspectRepository:
 
     def get_client(self, client_id: int) -> Optional[dict]:
         with self._conn() as conn:
-            row = conn.execute(
-                "SELECT * FROM clients WHERE id = ?", (client_id,)
-            ).fetchone()
-            return dict(row) if row else None
+            return conn.execute("SELECT * FROM clients WHERE id = %s", (client_id,)).fetchone()
 
     def insert_client(self, data: dict) -> int:
-        now = datetime.now().isoformat()
-        cols = [
-            "prospect_id",
-            "display_name",
-            "category",
-            "contact_email",
-            "phone",
-            "notes",
-            "stage",
-            "quote_amount",
-            "quote_currency",
-            "quote_pdf_path",
-            "estimated_delivery_at",
-            "quoted_at",
-            "contract_required",
-            "contract_skipped",
-            "contract_signed_at",
-            "contract_pdf_path",
-            "payment_status",
-            "github_repo_url",
-            "production_domain",
-            "drive_folder_url",
-            "staging_url",
-            "maps_url",
-            "latitude",
-            "longitude",
-        ]
-        row = {c: data[c] for c in cols if c in data}
+        row = {c: data[c] for c in CLIENT_COLUMNS if c in data}
         row.setdefault("display_name", "")
         row.setdefault("stage", "quote_sent")
-        row["created_at"] = now
-        row["updated_at"] = now
-        for k in ("contract_required", "contract_skipped"):
-            if k in row and row[k] is not None:
-                row[k] = 1 if row[k] else 0
-        keys = list(row.keys())
-        placeholders = ",".join("?" * len(keys))
+        cols = list(row.keys())
+        query = sql.SQL("INSERT INTO clients ({cols}) VALUES ({vals}) RETURNING id").format(
+            cols=sql.SQL(", ").join(map(sql.Identifier, cols)),
+            vals=sql.SQL(", ").join(sql.Placeholder() * len(cols)),
+        )
         with self._conn() as conn:
-            cur = conn.execute(
-                f"INSERT INTO clients ({','.join(keys)}) VALUES ({placeholders})",
-                [row[k] for k in keys],
-            )
-            conn.commit()
-            return int(cur.lastrowid)
+            new = conn.execute(query, [_db_value(c, row[c]) for c in cols]).fetchone()
+            return int(new["id"])
 
     def update_client(self, client_id: int, data: dict) -> None:
         if not data:
             return
-        allowed = {
-            "prospect_id",
-            "display_name",
-            "category",
-            "contact_email",
-            "phone",
-            "notes",
-            "stage",
-            "quote_amount",
-            "quote_currency",
-            "quote_pdf_path",
-            "estimated_delivery_at",
-            "quoted_at",
-            "contract_required",
-            "contract_skipped",
-            "contract_signed_at",
-            "contract_pdf_path",
-            "payment_status",
-            "github_repo_url",
-            "production_domain",
-            "drive_folder_url",
-            "staging_url",
-            "maps_url",
-            "latitude",
-            "longitude",
-        }
-        updates = {k: v for k, v in data.items() if k in allowed}
+        updates = {k: v for k, v in data.items() if k in CLIENT_COLUMNS}
         if not updates:
             return
-        for k in ("contract_required", "contract_skipped"):
-            if k in updates and updates[k] is not None:
-                updates[k] = 1 if updates[k] else 0
-        updates["updated_at"] = datetime.now().isoformat()
-        sets = ", ".join(f"{k} = ?" for k in updates)
-        params = list(updates.values()) + [client_id]
+        cols = list(updates.keys())
+        query = sql.SQL("UPDATE clients SET {sets}, updated_at = now() WHERE id = %s").format(
+            sets=sql.SQL(", ").join(
+                sql.SQL("{} = %s").format(sql.Identifier(c)) for c in cols
+            )
+        )
         with self._conn() as conn:
-            conn.execute(f"UPDATE clients SET {sets} WHERE id = ?", params)
-            conn.commit()
+            conn.execute(query, [_db_value(c, updates[c]) for c in cols] + [client_id])
 
     def delete_client(self, client_id: int) -> None:
         with self._conn() as conn:
-            conn.execute("DELETE FROM clients WHERE id = ?", (client_id,))
-            conn.commit()
+            conn.execute("DELETE FROM clients WHERE id = %s", (client_id,))
 
     def touch_client_updated_at(self, client_id: int) -> None:
         with self._conn() as conn:
-            conn.execute(
-                "UPDATE clients SET updated_at = ? WHERE id = ?",
-                (datetime.now().isoformat(), client_id),
-            )
-            conn.commit()
+            conn.execute("UPDATE clients SET updated_at = now() WHERE id = %s", (client_id,))
 
     def get_client_meeting(self, meeting_id: int) -> Optional[dict]:
         with self._conn() as conn:
-            row = conn.execute(
-                "SELECT * FROM client_meetings WHERE id = ?", (meeting_id,)
+            return conn.execute(
+                "SELECT * FROM client_meetings WHERE id = %s", (meeting_id,)
             ).fetchone()
-            return dict(row) if row else None
 
     def list_client_meetings(self, client_id: int) -> list[dict]:
         with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT * FROM client_meetings WHERE client_id = ? ORDER BY datetime(scheduled_at)",
+            return conn.execute(
+                "SELECT * FROM client_meetings WHERE client_id = %s ORDER BY scheduled_at, id",
                 (client_id,),
             ).fetchall()
-            return [dict(r) for r in rows]
 
     def insert_client_meeting(self, client_id: int, data: dict) -> int:
         title = data.get("title", "")
-        scheduled_at = data.get("scheduled_at") or datetime.now().isoformat()
+        scheduled_at = _db_value("scheduled_at", data.get("scheduled_at"))
         duration_min = int(data.get("duration_min", 60))
         notes = data.get("notes", "")
         status = data.get("status", "scheduled")
         with self._conn() as conn:
-            cur = conn.execute(
+            row = conn.execute(
                 """
                 INSERT INTO client_meetings (client_id, title, scheduled_at, duration_min, notes, status)
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, COALESCE(%s::timestamptz, now()), %s, %s, %s)
+                RETURNING id
                 """,
                 (client_id, title, scheduled_at, duration_min, notes, status),
-            )
-            conn.commit()
-            self.touch_client_updated_at(client_id)
-            return int(cur.lastrowid)
+            ).fetchone()
+            conn.execute("UPDATE clients SET updated_at = now() WHERE id = %s", (client_id,))
+            return int(row["id"])
 
     def update_client_meeting(self, meeting_id: int, data: dict) -> None:
-        allowed = {"title", "scheduled_at", "duration_min", "notes", "status"}
+        allowed = ("title", "scheduled_at", "duration_min", "notes", "status")
         updates = {k: v for k, v in data.items() if k in allowed}
         if not updates:
             return
         if "duration_min" in updates:
             updates["duration_min"] = int(updates["duration_min"])
-        cid_row = None
-        with self._conn() as conn:
-            row = conn.execute(
-                "SELECT client_id FROM client_meetings WHERE id = ?", (meeting_id,)
-            ).fetchone()
-            if not row:
-                return
-            cid_row = int(row["client_id"])
-            sets = ", ".join(f"{k} = ?" for k in updates)
-            conn.execute(
-                f"UPDATE client_meetings SET {sets} WHERE id = ?",
-                list(updates.values()) + [meeting_id],
+        cols = list(updates.keys())
+        query = sql.SQL(
+            "UPDATE client_meetings SET {sets} WHERE id = %s RETURNING client_id"
+        ).format(
+            sets=sql.SQL(", ").join(
+                sql.SQL("{} = %s").format(sql.Identifier(c)) for c in cols
             )
-            conn.commit()
-        if cid_row is not None:
-            self.touch_client_updated_at(cid_row)
-
-    def delete_client_meeting(self, meeting_id: int) -> None:
-        cid_row = None
+        )
         with self._conn() as conn:
             row = conn.execute(
-                "SELECT client_id FROM client_meetings WHERE id = ?", (meeting_id,)
+                query, [_db_value(c, updates[c]) for c in cols] + [meeting_id]
             ).fetchone()
             if row:
-                cid_row = int(row["client_id"])
-            conn.execute("DELETE FROM client_meetings WHERE id = ?", (meeting_id,))
-            conn.commit()
-        if cid_row is not None:
-            self.touch_client_updated_at(cid_row)
+                conn.execute(
+                    "UPDATE clients SET updated_at = now() WHERE id = %s", (row["client_id"],)
+                )
+
+    def delete_client_meeting(self, meeting_id: int) -> None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "DELETE FROM client_meetings WHERE id = %s RETURNING client_id", (meeting_id,)
+            ).fetchone()
+            if row:
+                conn.execute(
+                    "UPDATE clients SET updated_at = now() WHERE id = %s", (row["client_id"],)
+                )
 
     def create_client_from_prospect_name(self, prospect_name: str) -> int:
         pid = self.get_prospect_id_by_name(prospect_name)

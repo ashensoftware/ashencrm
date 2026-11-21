@@ -166,7 +166,7 @@ def create_clients_router(db):
 
             patch: dict[str, Any] = {
                 "quote_pdf_path": str(dest),
-                "quoted_at": datetime.now().isoformat(),
+                "quoted_at": datetime.now().astimezone().isoformat(),
             }
             if quote_amount is not None:
                 patch["quote_amount"] = quote_amount

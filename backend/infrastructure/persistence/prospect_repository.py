@@ -15,6 +15,12 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
 from backend.config.settings import settings
+from backend.domain.cleanup import (
+    clean_address,
+    extract_google_place_id,
+    plausible_reviews_count,
+    split_legacy_photo,
+)
 from backend.domain.prospect import Prospect, ProspectStatus
 from backend.infrastructure.persistence.pg import (
     get_default_pool,
@@ -258,14 +264,22 @@ class ProspectRepository:
 
     # ------------------------------------------------------------ prospects
 
+    @staticmethod
+    def _find_id(conn, name: str, address: str) -> Optional[int]:
+        """Id del lead por (name, address). Prefiere la dirección exacta guardada y si no,
+        la versión limpia: un re-scrape trae la dirección sucia y debe casar con la limpia."""
+        raw = address or ""
+        row = conn.execute(
+            "SELECT id FROM prospects WHERE name = %s AND address = ANY(%s) "
+            "ORDER BY (address = %s) DESC, id LIMIT 1",
+            (name, list({raw, clean_address(raw)}), raw),
+        ).fetchone()
+        return int(row["id"]) if row else None
+
     def exists_by_name_and_address(self, name: str, address: str) -> bool:
         """True si ya hay un lead con la misma clave única (name, address) que en el scrape."""
         with self._conn() as conn:
-            row = conn.execute(
-                "SELECT 1 FROM prospects WHERE name = %s AND address = %s LIMIT 1",
-                (name, address),
-            ).fetchone()
-            return row is not None
+            return self._find_id(conn, name, address) is not None
 
     def delete_prospect_by_id(self, prospect_id: int) -> bool:
         """Elimina el lead. clients.prospect_id queda NULL por ON DELETE SET NULL."""
@@ -276,6 +290,14 @@ class ProspectRepository:
     def insert_prospect(self, prospect: Prospect) -> bool:
         data = prospect.to_dict()
         data.pop("id", None)
+        data["address"] = clean_address(data.get("address"))
+        data["reviews_count"] = plausible_reviews_count(data.get("reviews_count"))
+        place_id = extract_google_place_id(data.get("maps_url"))
+        if place_id:
+            data["google_place_id"] = place_id
+        data["screenshot_path"], legacy_photo = split_legacy_photo(data.get("screenshot_path"))
+        if legacy_photo:
+            data["legacy_photo_url"] = legacy_photo
         cols = _checked(data.keys(), PROSPECT_COLUMNS, "prospects")
         query = sql.SQL(
             "INSERT INTO prospects ({cols}) VALUES ({vals}) "
@@ -359,14 +381,16 @@ class ProspectRepository:
 
     def _update_prospect(self, name: str, address: str, data: dict) -> None:
         cols = _checked(data.keys(), PROSPECT_COLUMNS, "prospects")
-        query = sql.SQL("UPDATE prospects SET {sets} WHERE name = %s AND address = %s").format(
+        query = sql.SQL("UPDATE prospects SET {sets} WHERE id = %s").format(
             sets=sql.SQL(", ").join(
                 sql.SQL("{} = %s").format(sql.Identifier(c)) for c in cols
             )
         )
-        params = [_db_value(c, data[c]) for c in cols] + [name, address]
         with self._conn() as conn:
-            conn.execute(query, params)
+            prospect_id = self._find_id(conn, name, address)
+            if prospect_id is None:
+                return
+            conn.execute(query, [_db_value(c, data[c]) for c in cols] + [prospect_id])
 
     def get_random_prospect(
         self, status: str = "scraped", exclude_name: Optional[str] = None

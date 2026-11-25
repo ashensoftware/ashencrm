@@ -7,6 +7,23 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    # Postgres desechable: sin él, conftest omite todas las pruebas de base de datos.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ashencrm
+          POSTGRES_PASSWORD: ashencrm
+          POSTGRES_DB: ashencrm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ashencrm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://ashencrm:ashencrm@localhost:5432/ashencrm
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -15,7 +32,7 @@ jobs:
       - run: pip install -e . ruff
       - run: python -m playwright install --with-deps chromium
       - run: python -m pytest -q
-      - run: python -m ruff check backend/api/authorization.py backend/api/routes/pipeline.py backend/api/routes/providers.py backend/api/routes/demos.py backend/workers backend/core/secrets.py backend/core/ssrf.py backend/domain/identity.py backend/infrastructure/providers backend/infrastructure/persistence/platform_repository.py backend/infrastructure/persistence/sqlite_import.py
+      - run: python -m ruff check backend/api/authorization.py backend/api/routes/pipeline.py backend/api/routes/providers.py backend/api/routes/demos.py backend/api/routes/clients.py backend/workers backend/core/secrets.py backend/core/ssrf.py backend/domain/identity.py backend/infrastructure/providers backend/infrastructure/storage backend/infrastructure/persistence/platform_repository.py backend/infrastructure/persistence/ingest.py backend/scripts/run_generator.py backend/scripts/run_next_phases.py backend/scripts/run_pipeline_cycle.py backend/scripts/run_pipeline_scheduler.py backend/scripts/run_scraper.py rescrape_all.py data/scripts/clean_data.py data/scripts/enrich_instagram.py data/scripts/enrich_maps.py data/scripts/enrich_web.py data/scripts/health_check.py data/scripts/scrape_to_target.py data/scripts/verify.py
 
   frontend:
     runs-on: ubuntu-latest

@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from backend.database.db import Database
 from backend.domain.prospect import Prospect
+from backend.infrastructure.persistence.ingest import ingest_repository
 from backend.scraper.instagram import InstagramChecker
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -25,11 +25,11 @@ async def main():
     parser.add_argument("--needs-enrichment", action="store_true")
     args = parser.parse_args()
 
-    db = Database()
+    db = ingest_repository()
     ig = InstagramChecker(headless=True)
 
     if args.needs_enrichment:
-        with db._get_conn() as conn:
+        with db._conn() as conn:
             rows = conn.execute(
                 """
                 SELECT * FROM prospects
@@ -40,8 +40,8 @@ async def main():
                     OR (ig_email IS NULL OR ig_email = '')
                     OR (ig_phone IS NULL OR ig_phone = '')
                 )
-                ORDER BY RANDOM()
-                LIMIT ?
+                ORDER BY random()
+                LIMIT %s
             """,
                 (args.limit,),
             ).fetchall()

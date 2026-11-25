@@ -128,6 +128,11 @@ def create_app(
 ) -> FastAPI:
     active = security or runtime_security_from_settings()
     mode = _validate_runtime(active, jwk_provider=jwk_provider)
+    if active.app_env == "production" and not settings.files_bucket:
+        raise RuntimeError(
+            "FILES_BUCKET es obligatoria en production: el VM no guarda archivos "
+            "de negocio en disco (data-platform D2)."
+        )
     if db is None or platform is None:
         prepare_database()
     database = db if db is not None else Database()

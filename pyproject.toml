@@ -17,6 +17,7 @@ dependencies = [
     "h3>=4.0.0",
     "psycopg[binary]>=3.2",
     "psycopg-pool>=3.2",
+    "google-cloud-storage>=2.16",
 ]
 
 [tool.pytest.ini_options]

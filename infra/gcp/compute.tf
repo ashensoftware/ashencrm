@@ -81,6 +81,7 @@ resource "google_compute_instance" "api" {
       supabase_url             = var.supabase_url
       supabase_publishable_key = var.supabase_publishable_key
       supabase_jwks_url        = var.supabase_jwks_url
+      files_bucket             = google_storage_bucket.files.name
     }), "\r\n", "\n")
   }
 

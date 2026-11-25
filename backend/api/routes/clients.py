@@ -1,13 +1,17 @@
-"""CRUD de clientes post-venta, reuniones y cotización PDF."""
+"""CRUD de clientes post-venta, reuniones y cotización PDF.
 
-from pathlib import Path
+El PDF de la cotización vive en el almacén de archivos (bucket en producción,
+carpeta local en desarrollo); `quote_pdf_path` guarda su clave, no una ruta.
+"""
+
 from typing import Any, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 
-from backend.config.settings import settings
 from backend.core.google_maps_url import parse_google_maps_link
+from backend.infrastructure.storage import FileStore, get_file_store, validate_key
 
 CLIENT_STAGES = frozenset(
     {
@@ -26,14 +30,21 @@ CLIENT_STAGES = frozenset(
 MAX_QUOTE_PDF_BYTES = 15 * 1024 * 1024
 
 
-def _clients_upload_dir() -> Path:
-    d = settings.data_dir / "client_uploads"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+def quote_key(client_id: int) -> str:
+    return f"quotes/{client_id}/quote.pdf"
 
 
-def create_clients_router(db):
+def _stored_quote_key(client: dict) -> Optional[str]:
+    """Clave guardada, o None si no hay PDF (o si es una ruta local de antes de D2)."""
+    try:
+        return validate_key(client.get("quote_pdf_path") or "")
+    except ValueError:
+        return None
+
+
+def create_clients_router(db, files: Optional[FileStore] = None):
     router = APIRouter(prefix="/api/clients", tags=["Clients"])
+    store = files or get_file_store()
 
     @router.get("")
     async def list_clients():
@@ -115,13 +126,13 @@ def create_clients_router(db):
             if not db.get_client(client_id):
                 raise HTTPException(status_code=404, detail="Cliente no encontrado")
             c = db.get_client(client_id)
-            if c and c.get("quote_pdf_path"):
-                p = Path(c["quote_pdf_path"])
-                if p.is_file():
-                    try:
-                        p.unlink()
-                    except OSError:
-                        pass
+            key = _stored_quote_key(c or {})
+            if key:
+                try:
+                    await run_in_threadpool(store.delete, key)
+                except Exception:
+                    # Un PDF huérfano no debe impedir borrar el cliente.
+                    pass
             db.delete_client(client_id)
             return {"ok": True}
         except HTTPException:
@@ -158,14 +169,12 @@ def create_clients_router(db):
             raw = await file.read()
             if len(raw) > MAX_QUOTE_PDF_BYTES:
                 raise HTTPException(status_code=400, detail="PDF demasiado grande (máx 15MB)")
-            sub = _clients_upload_dir() / str(client_id)
-            sub.mkdir(parents=True, exist_ok=True)
-            dest = sub / "quote.pdf"
-            dest.write_bytes(raw)
+            key = quote_key(client_id)
+            await run_in_threadpool(store.put, key, raw, "application/pdf")
             from datetime import datetime
 
             patch: dict[str, Any] = {
-                "quote_pdf_path": str(dest),
+                "quote_pdf_path": key,
                 "quoted_at": datetime.now().astimezone().isoformat(),
             }
             if quote_amount is not None:
@@ -188,11 +197,15 @@ def create_clients_router(db):
         c = db.get_client(client_id)
         if not c:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
-        path = c.get("quote_pdf_path") or ""
-        p = Path(path) if path else None
-        if not p or not p.is_file():
+        key = _stored_quote_key(c)
+        data = await run_in_threadpool(store.get, key) if key else None
+        if data is None:
             raise HTTPException(status_code=404, detail="Sin cotización PDF")
-        return FileResponse(p, media_type="application/pdf", filename="cotizacion.pdf")
+        return Response(
+            content=data,
+            media_type="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="cotizacion.pdf"'},
+        )
 
     @router.post("/{client_id:int}/meetings")
     async def add_meeting(client_id: int, body: dict):

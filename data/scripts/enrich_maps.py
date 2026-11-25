@@ -21,9 +21,9 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from playwright.async_api import async_playwright
 
-from backend.config.settings import settings
 from backend.core.maps_website import website_plausible_for_business
-from backend.database.db import Database
+from backend.infrastructure.persistence.ingest import ingest_repository
+from backend.infrastructure.persistence.prospect_repository import ProspectRepository
 from backend.scraper.maps_website import extract_official_website_from_maps_page
 from backend.scraper.models import Prospect
 
@@ -68,7 +68,7 @@ def parse_rating_and_reviews(html: str) -> tuple[float, int]:
     return rating, reviews_count
 
 
-async def enrich_one(page, db: Database, p: Prospect) -> None:
+async def enrich_one(page, db: ProspectRepository, p: Prospect) -> None:
     if not p.maps_url:
         return
 
@@ -131,7 +131,7 @@ async def main():
     )
     args = parser.parse_args()
 
-    db = Database()
+    db = ingest_repository()
 
     if (not args.needs_website) and (not args.needs_reviews):
         needs_website = True
@@ -148,13 +148,13 @@ async def main():
 
     where_sql = " OR ".join(where_clauses) if where_clauses else "1=0"
 
-    with db._get_conn() as conn:
+    with db._conn() as conn:
         rows = conn.execute(
             f"""
             SELECT * FROM prospects
             WHERE ({where_sql }) AND maps_url IS NOT NULL AND maps_url<>''
-            ORDER BY scraped_at DESC
-            LIMIT ?
+            ORDER BY scraped_at DESC NULLS LAST
+            LIMIT %s
             """,
             (args.limit,),
         ).fetchall()
@@ -190,7 +190,7 @@ async def main():
         await browser.close()
 
     print("Done.")
-    print(db.stats())
+    print(db.count_by_status())
 
 
 if __name__ == "__main__":

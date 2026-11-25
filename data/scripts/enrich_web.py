@@ -7,7 +7,6 @@ Objetivo:
 
 import argparse
 import re
-import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -16,9 +15,9 @@ from urllib.request import Request, urlopen
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from backend.config.settings import settings
 from backend.core.maps_website import website_plausible_for_business
-from backend.database.db import Database
+from backend.infrastructure.persistence.ingest import ingest_repository
+from backend.infrastructure.persistence.prospect_repository import ProspectRepository
 from backend.scraper.models import Prospect
 
 USER_AGENT = (
@@ -151,8 +150,8 @@ def enrich_prospect_external(p: Prospect) -> dict:
     return patch
 
 
-def load_candidates(db: Database, limit: int, city: str | None) -> list[Prospect]:
-    with db._get_conn() as conn:
+def load_candidates(db: ProspectRepository, limit: int, city: str | None) -> list[Prospect]:
+    with db._conn() as conn:
         query = """
             SELECT * FROM prospects
             WHERE
@@ -165,9 +164,9 @@ def load_candidates(db: Database, limit: int, city: str | None) -> list[Prospect
         """
         params = []
         if city:
-            query += " AND city = ?"
+            query += " AND city = %s"
             params.append(city)
-        query += " ORDER BY RANDOM() LIMIT ?"
+        query += " ORDER BY random() LIMIT %s"
         params.append(limit)
         rows = conn.execute(query, params).fetchall()
     return [Prospect.from_dict(dict(r)) for r in rows]
@@ -189,7 +188,7 @@ def main():
     )
     args = parser.parse_args()
 
-    db = Database()
+    db = ingest_repository()
     candidates = load_candidates(db, args.limit, args.city)
     print(f"Candidatos: {len (candidates )}")
 
@@ -207,7 +206,7 @@ def main():
         time.sleep(max(0, args.sleep_ms) / 1000.0)
 
     print(f"Done. Updated: {updated }/{len (candidates )}")
-    print(db.stats())
+    print(db.count_by_status())
 
 
 if __name__ == "__main__":

@@ -3,7 +3,11 @@ Ejecuta un ciclo completo del pipeline:
 1) Scrape incremental
 2) Enriquecimiento Instagram
 3) Enriquecimiento externo
-4) Health check + snapshot histórico
+4) Health check
+
+Cada paso es un script local con el rol crm_ingest (DATABASE_INGEST_URL). El
+snapshot histórico de salud ya no se graba aquí: crm_ingest no escribe en
+health_history; se graba desde la API (POST /api/prospects/health/record).
 """
 
 import argparse
@@ -11,16 +15,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent.parent))
-from backend.database.db import Database
+REPO = Path(__file__).resolve().parents[2]
+RUN_SCRAPER = REPO / "backend" / "scripts" / "run_scraper.py"
+ENRICH_INSTAGRAM = REPO / "data" / "scripts" / "enrich_instagram.py"
+ENRICH_WEB = REPO / "data" / "scripts" / "enrich_web.py"
+HEALTH_CHECK = REPO / "data" / "scripts" / "health_check.py"
 
-ROOT = Path(__file__).parent.parent
 
-
-def run_cmd(cmd: list[str]) -> int:
+def run_cmd(script: Path, *args: str) -> int:
+    cmd = [sys.executable, str(script), *args]
     print("$", " ".join(cmd))
-    p = subprocess.run(cmd, cwd=ROOT)
-    return p.returncode
+    return subprocess.run(cmd, cwd=REPO).returncode
 
 
 def main() -> int:
@@ -37,60 +42,36 @@ def main() -> int:
 
     if not args.skip_scrape:
         rc = run_cmd(
-            [
-                "python",
-                "scripts/run_scraper.py",
-                "--city",
-                args.city,
-                "--category",
-                args.scrape_category,
-                "--limit",
-                str(args.scrape_limit),
-                "--no-ig",
-            ]
+            RUN_SCRAPER,
+            "--city", args.city,
+            "--category", args.scrape_category,
+            "--limit", str(args.scrape_limit),
+            "--no-ig",
         )
         if rc != 0:
             return rc
 
     if not args.skip_ig:
         rc = run_cmd(
-            [
-                "python",
-                "scripts/enrich_instagram.py",
-                "--limit",
-                str(args.ig_limit),
-                "--needs-enrichment",
-                "--city",
-                args.city,
-            ]
+            ENRICH_INSTAGRAM,
+            "--limit", str(args.ig_limit),
+            "--needs-enrichment",
+            "--city", args.city,
         )
         if rc != 0:
             return rc
 
     if not args.skip_external:
         rc = run_cmd(
-            [
-                "python",
-                "scripts/enrich_web.py",
-                "--limit",
-                str(args.ext_limit),
-                "--city",
-                args.city,
-                "--sleep-ms",
-                "100",
-            ]
+            ENRICH_WEB,
+            "--limit", str(args.ext_limit),
+            "--city", args.city,
+            "--sleep-ms", "100",
         )
         if rc != 0:
             return rc
 
-    rc = run_cmd(["python", "scripts/health_check.py"])
-    if rc != 0:
-        return rc
-
-    db = Database()
-    snap = db.record_health_snapshot()
-    print("Health snapshot recorded:", snap["created_at"])
-    return 0
+    return run_cmd(HEALTH_CHECK)
 
 
 if __name__ == "__main__":

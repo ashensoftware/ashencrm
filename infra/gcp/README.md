@@ -7,12 +7,9 @@ Despliega la API FastAPI y el worker en un `e2-micro` Always Free, con secretos 
 - Proyecto esperado: `ashencrm-fx`
 - VM `ashencrm-api` (`e2-micro`, Debian 12, puerto 8000)
 - Firewall TCP/8000
-- Secretos de Supabase y de plataforma
+- Secretos en Secret Manager
 - Bucket privado `ashencrm-files` para archivos de negocio: fotos (`photos/`) y PDFs de cotización (`quotes/`)
 - Presupuesto de facturación con alertas al 50 %, 90 % y 100 %
-
-Fuera de Terraform (creados con `gcloud`): el bucket del estado
-`ashencrm-fx-tfstate` y el secreto `terraform-tfvars`.
 
 El frontend sigue en Vercel. Lovable y WhatsApp real siguen fuera de alcance.
 
@@ -39,9 +36,9 @@ the same time. The bucket keeps the 20 previous versions of the state, so a bad
 apply can be undone.
 
 1. **Access.** Their Google account needs read/write on the state bucket
-   (`roles/storage.objectAdmin` on `gs://ashencrm-fx-tfstate`), read access to
-   the `terraform-tfvars` secret, plus the permissions they already used for the
-   first apply. Project Owner/Editor covers all of it.
+   (`roles/storage.objectAdmin` on `gs://ashencrm-fx-tfstate`, which also holds
+   `terraform.tfvars`), plus the permissions they already used for the first
+   apply. Project Owner/Editor covers all of it.
 2. **Delete their old local copy first.** Remove `infra/gcp/terraform.tfstate`
    and `infra/gcp/terraform.tfstate.backup` on their machine. Any local copy from
    before 2026-11-25 is stale: it's missing the SSH-firewall import, the static
@@ -53,18 +50,17 @@ apply can be undone.
    git pull
    gcloud auth application-default login
    cd infra/gcp
-   gcloud secrets versions access latest --secret=terraform-tfvars --project ashencrm-fx --out-file=terraform.tfvars
+   gcloud storage cp gs://ashencrm-fx-tfstate/tfvars/terraform.tfvars terraform.tfvars
    terraform init
    terraform plan    # must say "No changes" unless someone left work unapplied
    ```
    After that, a normal `terraform plan` always uses the latest state.
-4. **`terraform.tfvars`.** The state bucket doesn't carry this file, and it holds
-   the Supabase keys, so it lives in Secret Manager as `terraform-tfvars`
-   (fetched in step 3). Use `--out-file`, not `>`: on Windows, redirecting the
-   console output changes the bytes. If you change a value, upload the new file
-   so everyone gets it:
+4. **`terraform.tfvars`.** Terraform doesn't store this file in the state, so it
+   sits next to it in the same private bucket, at `tfvars/terraform.tfvars`
+   (fetched in step 3). The bucket keeps previous versions. If you change a
+   value, upload the new file so everyone gets it:
    ```bash
-   gcloud secrets versions add terraform-tfvars --project ashencrm-fx --data-file=terraform.tfvars
+   gcloud storage cp terraform.tfvars gs://ashencrm-fx-tfstate/tfvars/terraform.tfvars
    ```
 
 Never commit `terraform.tfvars`, `*.tfstate*` or `*.tfplan`. If a crashed run leaves
@@ -87,6 +83,7 @@ bash infra/gcp/push_db_secrets.sh ashencrm-fx
 
 El script sube solo URLs de `crm_app` / `crm_readonly` (nunca la de `postgres`)
 y no imprime valores. Sin `ashencrm-database-url` el arranque falla a propósito.
+Tras subir una versión nueva destruye las anteriores.
 
 ## Notas
 

@@ -56,24 +56,21 @@ variable "api_static_ip" {
   default     = "35.232.72.212"
 }
 
+# Valores públicos de Supabase (el navegador ya los recibe): van en texto plano
+# al script de arranque, no a Secret Manager.
 variable "supabase_url" {
-  type      = string
-  sensitive = true
+  type        = string
+  description = "URL del proyecto de Supabase (pública)."
 }
 
 variable "supabase_publishable_key" {
-  type      = string
-  sensitive = true
-}
-
-variable "supabase_secret_key" {
-  type      = string
-  sensitive = true
+  type        = string
+  description = "Clave publicable de Supabase (pública por diseño)."
 }
 
 variable "supabase_jwks_url" {
-  type      = string
-  sensitive = true
+  type        = string
+  description = "URL JWKS de Supabase Auth (pública)."
 }
 
 variable "platform_secret_key" {

@@ -7,7 +7,7 @@ output "instance_name" {
 }
 
 output "api_external_ip" {
-  value = google_compute_instance.api.network_interface[0].access_config[0].nat_ip
+  value = google_compute_address.api.address
 }
 
 output "api_base_url" {

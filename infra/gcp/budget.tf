@@ -27,7 +27,7 @@ resource "google_billing_budget" "monthly_cap" {
     monitoring_notification_channels = [
       for channel in google_monitoring_notification_channel.budget_email : channel.id
     ]
-    disable_default_iam_recipients   = false
+    disable_default_iam_recipients  = false
     enable_project_level_recipients = true
   }
 }

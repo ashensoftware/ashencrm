@@ -50,6 +50,12 @@ variable "allowed_origins" {
   default     = "https://ashencrm.vercel.app,https://ashencrm-delta.vercel.app,http://localhost:5173"
 }
 
+variable "api_static_ip" {
+  type        = string
+  description = "IP externa del VM. La misma que usa frontend/vercel.json; reservarla la conserva."
+  default     = "35.232.72.212"
+}
+
 variable "supabase_url" {
   type      = string
   sensitive = true

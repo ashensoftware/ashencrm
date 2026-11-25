@@ -1,0 +1,4 @@
+# Scripts que corren en Linux (VM): siempre LF, aunque core.autocrlf=true en Windows.
+# Con CRLF, bash en el VM falla en la primera línea (set: pipefail\r: invalid option).
+*.sh text eol=lf
+*.tftpl text eol=lf

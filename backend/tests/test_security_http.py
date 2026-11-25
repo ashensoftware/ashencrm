@@ -1,14 +1,10 @@
 """HTTP: CORS, auth de /api/admin y consola SQL de solo lectura."""
 
-import tempfile
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.api.app_factory import RuntimeSecurity, create_app
 from backend.core.auth import issue_local_token
-from backend.infrastructure.persistence.prospect_repository import ProspectRepository
 
 SECRET = "test-local-secret"
 
@@ -30,9 +26,8 @@ def _security(**overrides) -> RuntimeSecurity:
 
 
 @pytest.fixture()
-def repo():
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
-        yield ProspectRepository(db_path=Path(tmp) / "t.db")
+def repo(prospect_repo):
+    return prospect_repo
 
 
 def _token(role: str) -> str:

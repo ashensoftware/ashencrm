@@ -34,10 +34,8 @@ fetch_secret() {
     | python3 -c 'import sys,json,base64; print(base64.b64decode(json.load(sys.stdin)["payload"]["data"]).decode())'
 }
 
-SUPABASE_URL=$(fetch_secret ashencrm-supabase-url)
-SUPABASE_PUBLISHABLE_KEY=$(fetch_secret ashencrm-supabase-publishable-key)
-SUPABASE_SECRET_KEY=$(fetch_secret ashencrm-supabase-secret-key)
-SUPABASE_JWKS_URL=$(fetch_secret ashencrm-supabase-jwks-url)
+# Solo lo secreto sale de Secret Manager. La URL, la clave publicable y la URL
+# JWKS de Supabase son públicas y Terraform las escribe abajo en texto plano.
 PLATFORM_SECRET_KEY=$(fetch_secret ashencrm-platform-secret-key)
 # Obligatoria: sin ella la API no arranca (no hay respaldo SQLite).
 DATABASE_URL=$(fetch_secret ashencrm-database-url)
@@ -48,17 +46,17 @@ cat >/opt/ashencrm/repo/.env <<EOF
 APP_ENV=production
 AUTH_MODE=oidc
 ALLOWED_ORIGINS=${allowed_origins}
-SUPABASE_URL=$${SUPABASE_URL}
-SUPABASE_PUBLISHABLE_KEY=$${SUPABASE_PUBLISHABLE_KEY}
-SUPABASE_SECRET_KEY=$${SUPABASE_SECRET_KEY}
-SUPABASE_JWKS_URL=$${SUPABASE_JWKS_URL}
-OIDC_ISSUER=$${SUPABASE_URL}/auth/v1
+SUPABASE_URL=${supabase_url}
+SUPABASE_PUBLISHABLE_KEY=${supabase_publishable_key}
+SUPABASE_JWKS_URL=${supabase_jwks_url}
+OIDC_ISSUER=${supabase_url}/auth/v1
 OIDC_AUDIENCE=authenticated
-OIDC_JWKS_URL=$${SUPABASE_JWKS_URL}
+OIDC_JWKS_URL=${supabase_jwks_url}
 PLATFORM_SECRET_KEY=$${PLATFORM_SECRET_KEY}
 DATABASE_URL=$${DATABASE_URL}
 DATABASE_READONLY_URL=$${DATABASE_READONLY_URL}
 DATABASE_SCHEMA=crm
+FILES_BUCKET=${files_bucket}
 OUTREACH_ENABLED=false
 DISCOVERY_PROVIDER=simulated
 LEGACY_MAPS_SCRAPER_ENABLED=0

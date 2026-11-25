@@ -35,6 +35,9 @@ data/db/*.db-*
 data/db/*.sqlite
 data/db/*.sqlite3
 data/screenshots/
+# Archivos de negocio en desarrollo (en producción van al bucket ashencrm-files).
+data/files/
+data/client_uploads/
 data/browser_data/
 data/exports/
 data/exports/*.db

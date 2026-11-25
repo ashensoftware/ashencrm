@@ -80,7 +80,6 @@ class Settings:
     data_dir: Path = PROJECT_ROOT / "data"
     screenshots_dir: Path = PROJECT_ROOT / "data" / "screenshots"
     browser_data_dir: Path = PROJECT_ROOT / "data" / "browser_data"
-    db_path: Path = PROJECT_ROOT / "data" / "db" / "prospects.db"
     sessions_dir: Path = PROJECT_ROOT / "data" / "sessions"
     exports_dir: Path = PROJECT_ROOT / "data" / "exports"
     app_env: str = field(default_factory=lambda: os.getenv("APP_ENV", "development"))
@@ -116,14 +115,20 @@ class Settings:
     )
     platform_secret_key: str = field(default_factory=lambda: os.getenv("PLATFORM_SECRET_KEY", ""))
     google_places_api_key: str = field(default_factory=lambda: os.getenv("GOOGLE_PLACES_API_KEY", ""))
-    # Solo origen de la importación única a Postgres (D4); la app ya no los abre.
-    platform_db_path: Path = PROJECT_ROOT / "data" / "db" / "platform.db"
     # Postgres (Supabase, pooler en modo sesión). DATABASE_URL usa el rol crm_app;
-    # DATABASE_READONLY_URL el rol crm_readonly (consola SQL).
+    # DATABASE_READONLY_URL el rol crm_readonly (consola SQL); DATABASE_INGEST_URL
+    # el rol crm_ingest (solo scripts locales, nunca en el VM).
     database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", "").strip())
     database_readonly_url: str = field(
         default_factory=lambda: os.getenv("DATABASE_READONLY_URL", "").strip()
     )
+    database_ingest_url: str = field(
+        default_factory=lambda: os.getenv("DATABASE_INGEST_URL", "").strip()
+    )
+    # Archivos de negocio (cotizaciones, fotos). Con FILES_BUCKET van al bucket de
+    # GCS; sin él, a files_dir. En production el bucket es obligatorio.
+    files_bucket: str = field(default_factory=lambda: os.getenv("FILES_BUCKET", "").strip())
+    files_dir: Path = PROJECT_ROOT / "data" / "files"
     database_schema: str = field(
         default_factory=lambda: os.getenv("DATABASE_SCHEMA", "crm").strip() or "crm"
     )
@@ -167,7 +172,6 @@ class Settings:
         self.browser_data_dir.mkdir(parents=True, exist_ok=True)
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         self.exports_dir.mkdir(parents=True, exist_ok=True)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         if self.supabase_url:
             if not self.oidc_issuer:
                 self.oidc_issuer = f"{self.supabase_url}/auth/v1"

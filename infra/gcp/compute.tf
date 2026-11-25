@@ -74,10 +74,14 @@ resource "google_compute_instance" "api" {
   metadata = {
     enable-oslogin = "FALSE"
     startup-script = replace(templatefile("${path.module}/startup.sh.tftpl", {
-      project_id      = var.project_id
-      git_repo        = var.git_repo
-      git_branch      = var.git_branch
-      allowed_origins = var.allowed_origins
+      project_id               = var.project_id
+      git_repo                 = var.git_repo
+      git_branch               = var.git_branch
+      allowed_origins          = var.allowed_origins
+      supabase_url             = var.supabase_url
+      supabase_publishable_key = var.supabase_publishable_key
+      supabase_jwks_url        = var.supabase_jwks_url
+      files_bucket             = google_storage_bucket.files.name
     }), "\r\n", "\n")
   }
 

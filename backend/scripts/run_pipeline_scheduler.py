@@ -4,10 +4,12 @@ Scheduler simple del pipeline (loop con intervalo fijo).
 
 import argparse
 import subprocess
+import sys
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).parent.parent
+REPO = Path(__file__).resolve().parents[2]
+CYCLE = REPO / "backend" / "scripts" / "run_pipeline_cycle.py"
 
 
 def main() -> int:
@@ -22,9 +24,7 @@ def main() -> int:
     while True:
         cycles += 1
         print(f"\n=== PIPELINE CYCLE {cycles } ===")
-        rc = subprocess.run(
-            ["python", "scripts/run_pipeline_cycle.py"], cwd=ROOT
-        ).returncode
+        rc = subprocess.run([sys.executable, str(CYCLE)], cwd=REPO).returncode
         print("Cycle rc:", rc)
         if args.max_cycles and cycles >= args.max_cycles:
             break

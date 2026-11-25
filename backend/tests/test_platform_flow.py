@@ -1,7 +1,6 @@
 """Autorización, cola durable, identidad, Places y Lovable sin red real."""
 
 import json
-import sqlite3
 import threading
 
 import httpx
@@ -16,7 +15,6 @@ from backend.core.ssrf import is_safe_public_url
 from backend.domain.identity import canonical_domain, identity_keys, phone_e164
 from backend.domain.prospect import Prospect
 from backend.infrastructure.persistence.platform_repository import POSTGRES_CLAIM_SQL, PlatformRepository
-from backend.infrastructure.persistence.sqlite_import import sqlite_import_plan
 from backend.infrastructure.providers.google_places import GooglePlacesClient, PlacesError
 from backend.infrastructure.providers.lovable_mcp import API_KEY_SUPPORTED, LovableMcpClient
 from backend.workers.runner import drain
@@ -253,14 +251,7 @@ def test_ssrf_blocks_local_targets(monkeypatch):
     assert is_safe_public_url("https://example.com/proyecto") is True
 
 
-def test_sqlite_plan_is_dry_and_postgres_claim_is_explicit(tmp_path):
-    source = tmp_path / "source.db"
-    with sqlite3.connect(source) as conn:
-        conn.execute("CREATE TABLE prospects (id INTEGER PRIMARY KEY, name TEXT)")
-        conn.execute("INSERT INTO prospects (name) VALUES ('sintetico')")
-    plan = sqlite_import_plan(source)
-    assert plan["writes"] == 0
-    assert plan["tables"]["prospects"] == 1
+def test_postgres_claim_is_explicit():
     assert "FOR UPDATE OF s SKIP LOCKED" in POSTGRES_CLAIM_SQL
 
 

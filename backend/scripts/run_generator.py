@@ -21,8 +21,8 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from backend.database.db import Database
 from backend.generator.service import GeneratorService
+from backend.infrastructure.persistence.ingest import ingest_repository
 
 
 async def main() -> None:
@@ -39,7 +39,7 @@ async def main() -> None:
     )
     args = parser.parse_args()
 
-    db = Database()
+    db = ingest_repository()
     gen = GeneratorService(db)
     ready = db.get_prospects(status="ready", limit=args.limit)
 

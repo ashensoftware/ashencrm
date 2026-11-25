@@ -15,11 +15,12 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from backend.config.settings import settings
-from backend.database.db import Database
+from backend.infrastructure.persistence.ingest import ingest_repository
+from backend.infrastructure.persistence.prospect_repository import ProspectRepository
 from backend.scraper.google_maps import GoogleMapsScraper
 
 
-def get_total_prospects(db: Database) -> int:
+def get_total_prospects(db: ProspectRepository) -> int:
     stats = db.count_by_status()
     return sum(stats.values())
 
@@ -46,7 +47,7 @@ async def main():
     )
     args = parser.parse_args()
 
-    db = Database()
+    db = ingest_repository()
     scraper = GoogleMapsScraper(headless=settings.scraper.headless)
 
     try:
@@ -93,7 +94,7 @@ async def main():
 
         print("\nProceso finalizado.")
         print(f"Total prospectos: {total }")
-        print(db.stats())
+        print(db.count_by_status())
 
     finally:
         await scraper.close()

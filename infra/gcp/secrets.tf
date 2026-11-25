@@ -5,12 +5,13 @@ resource "random_password" "platform_secret" {
 
 locals {
   platform_secret_key = var.platform_secret_key != "" ? var.platform_secret_key : random_password.platform_secret.result
+  # Solo valores secretos de verdad: Secret Manager cobra cada versión activa por
+  # encima de 6 (las deshabilitadas también cuentan). La URL de Supabase, la clave
+  # publicable y la URL JWKS son públicas (GET /api/auth/config las da sin login):
+  # van directo al script de arranque. La secret key de Supabase no la usa la API
+  # y no se lleva al VM. Activas hoy: esta + las 2 de la base de datos = 3.
   secret_values = {
-    "ashencrm-supabase-url"             = var.supabase_url
-    "ashencrm-supabase-publishable-key" = var.supabase_publishable_key
-    "ashencrm-supabase-secret-key"      = var.supabase_secret_key
-    "ashencrm-supabase-jwks-url"        = var.supabase_jwks_url
-    "ashencrm-platform-secret-key"      = local.platform_secret_key
+    "ashencrm-platform-secret-key" = local.platform_secret_key
   }
 }
 

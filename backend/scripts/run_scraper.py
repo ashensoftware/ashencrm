@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from backend.config.settings import settings
-from backend.database.db import Database
+from backend.infrastructure.persistence.ingest import ingest_repository
 from backend.scraper.google_maps import GoogleMapsScraper
 from backend.scraper.instagram import InstagramChecker
 
@@ -35,7 +35,7 @@ async def main():
     parser.add_argument("--no-ig", action="store_true")
     args = parser.parse_args()
 
-    db = Database()
+    db = ingest_repository()
     scraper = GoogleMapsScraper(headless=settings.scraper.headless)
     ig_checker = InstagramChecker(headless=settings.scraper.headless)
 

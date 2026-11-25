@@ -13,8 +13,8 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from backend.database.db import Database
 from backend.generator.service import GeneratorService
+from backend.infrastructure.persistence.ingest import ingest_repository
 from backend.outreach.service import OutreachService
 
 
@@ -29,7 +29,9 @@ async def main():
     )
     args = parser.parse_args()
 
-    db = Database()
+    # crm_ingest no lee app_settings: el mensaje de outreach usa la plantilla
+    # integrada en vez de la configurada en Administración.
+    db = ingest_repository()
     gen = GeneratorService(db)
     out = OutreachService(db)
 

@@ -14,6 +14,10 @@ output "api_base_url" {
   value = "http://${google_compute_instance.api.network_interface[0].access_config[0].nat_ip}:8000"
 }
 
+output "files_bucket" {
+  value = google_storage_bucket.files.name
+}
+
 output "budget_name" {
   value = google_billing_budget.monthly_cap.display_name
 }

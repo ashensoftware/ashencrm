@@ -30,9 +30,20 @@ push() {
       exit 1
       ;;
   esac
-  printf '%s' "$value" | gcloud secrets versions add "$secret" \
-    --project "$PROJECT" --data-file=- --format='value(name)' >/dev/null
-  echo "OK  $secret  <- $key (rol $role)"
+  local new old
+  new="$(printf '%s' "$value" | gcloud secrets versions add "$secret" \
+    --project "$PROJECT" --data-file=- --format='value(name)' | tr -d '\r')"
+  new="${new##*/}"
+  echo "OK  $secret  <- $key (rol $role), versión $new"
+  # Secret Manager cobra cada versión activa por encima de 6 en la cuenta, y una
+  # deshabilitada sigue contando: se destruyen las anteriores. El .env local es la
+  # fuente; el VM en marcha ya tiene su copia y no la pierde.
+  for old in $(gcloud secrets versions list "$secret" --project "$PROJECT" \
+      --filter='state!=DESTROYED' --format='value(name.basename())' | tr -d '\r'); do
+    [ "$old" = "$new" ] && continue
+    gcloud secrets versions destroy "$old" --secret "$secret" --project "$PROJECT" --quiet >/dev/null 2>&1
+    echo "    versión anterior $old destruida"
+  done
 }
 
 push ashencrm-database-url DATABASE_URL crm_app

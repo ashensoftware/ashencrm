@@ -5,10 +5,8 @@ Ejecutar con el venv activo:
   python rescrape_all.py --workers 3
 
 Varias categorías se scrapean en paralelo (cada una con su propio navegador Playwright).
-Las inserciones en SQLite van serializadas para evitar "database is locked".
-
-Si quieres reiniciar todo desde cero:
-  python rescrape_all.py --clear-existing
+Escribe en Postgres con el rol crm_ingest (DATABASE_INGEST_URL): solo inserta y
+actualiza leads, nunca borra. Los leads ya guardados se saltan sin scrapear.
 """
 
 from __future__ import annotations
@@ -16,7 +14,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import platform
-import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -27,11 +24,9 @@ if platform.system() == "Windows":
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from backend.config.settings import settings
+from backend.infrastructure.persistence.ingest import ingest_repository
 from backend.infrastructure.persistence.prospect_repository import ProspectRepository
 from backend.scraper.google_maps import GoogleMapsScraper
-
-DB_PATH = settings.db_path
 
 # Categorías y cantidad de leads a scrapear por cada una
 SCRAPE_PLAN = [
@@ -48,25 +43,11 @@ SCRAPE_PLAN = [
 ]
 
 
-def clear_all_leads() -> None:
-    """Borra TODOS los leads de la base de datos."""
-    conn = sqlite3.connect(str(DB_PATH))
-    cur = conn.cursor()
-    cur.execute("DELETE FROM prospects")
-    deleted = cur.rowcount
-    conn.commit()
-    conn.close()
-    print(f"[LIMPIEZA] Eliminados {deleted} leads de la base de datos.")
-
-
 def parse_args() -> argparse.Namespace:
+    # Ya no existe --clear-existing: borraba todos los leads, y desde el PC eso es
+    # la base de producción. crm_ingest no tiene DELETE.
     parser = argparse.ArgumentParser(
-        description="Re-scrape masivo de leads preservando estados existentes por defecto."
-    )
-    parser.add_argument(
-        "--clear-existing",
-        action="store_true",
-        help="Borra todos los leads antes de scrapear (pierde estados manuales).",
+        description="Re-scrape masivo de leads preservando estados existentes."
     )
     parser.add_argument(
         "--workers",
@@ -147,18 +128,13 @@ async def scrape_plan_item(
             await scraper.close()
 
 
-async def run_scrape(clear_existing: bool = False, workers: int = 2) -> None:
-    if clear_existing:
-        clear_all_leads()
-    else:
-        print(
-            "[MODO SEGURO] No se borrarán leads existentes; se preservan estados manuales."
-        )
+async def run_scrape(workers: int = 2) -> None:
+    print("[MODO SEGURO] No se borran leads existentes; se preservan estados manuales.")
 
     workers = max(1, min(workers, len(SCRAPE_PLAN)))
     print(f"[PARALELO] Hasta {workers} categorías a la vez (una instancia de navegador por categoría).")
 
-    db = ProspectRepository(db_path=DB_PATH)
+    db = ingest_repository()
     semaphore = asyncio.Semaphore(workers)
     db_lock = asyncio.Lock()
 
@@ -184,6 +160,4 @@ async def run_scrape(clear_existing: bool = False, workers: int = 2) -> None:
 
 if __name__ == "__main__":
     args = parse_args()
-    asyncio.run(
-        run_scrape(clear_existing=args.clear_existing, workers=args.workers)
-    )
+    asyncio.run(run_scrape(workers=args.workers))

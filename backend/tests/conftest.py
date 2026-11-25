@@ -94,3 +94,16 @@ def platform_repo(clean_db):
     from backend.infrastructure.persistence.platform_repository import PlatformRepository
 
     return PlatformRepository(pool=clean_db)
+
+
+@pytest.fixture(autouse=True)
+def file_store(tmp_path):
+    """Cada prueba guarda archivos en su carpeta temporal: nunca en data/files ni en GCS."""
+    from backend.infrastructure.storage import LocalFileStore, set_file_store
+
+    store = LocalFileStore(tmp_path / "files")
+    set_file_store(store)
+    try:
+        yield store
+    finally:
+        set_file_store(None)

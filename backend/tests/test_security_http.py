@@ -80,7 +80,28 @@ def test_production_rejects_local_auth_and_wildcard():
         )
 
 
-def test_production_cors_is_explicit(repo):
+_PROD_OIDC = dict(
+    app_env="production",
+    allowed_origins=("https://crm.example.com",),
+    auth_mode="oidc",
+    oidc_issuer="https://issuer.example",
+    oidc_audience="ashencrm",
+    oidc_jwks_url="https://issuer.example/jwks",
+)
+
+
+def test_production_requires_files_bucket(repo, monkeypatch):
+    from backend.config.settings import settings
+
+    monkeypatch.setattr(settings, "files_bucket", "")
+    with pytest.raises(RuntimeError, match="FILES_BUCKET"):
+        create_app(security=_security(**_PROD_OIDC), db=repo)
+
+
+def test_production_cors_is_explicit(repo, monkeypatch):
+    from backend.config.settings import settings
+
+    monkeypatch.setattr(settings, "files_bucket", "ashencrm-files-test")
     app = create_app(
         security=_security(
             app_env="production",

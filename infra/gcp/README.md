@@ -7,23 +7,65 @@ Despliega la API FastAPI y el worker en un `e2-micro` Always Free, con secretos 
 - Proyecto esperado: `ashencrm-fx`
 - VM `ashencrm-api` (`e2-micro`, Debian 12, puerto 8000)
 - Firewall TCP/8000
-- Secretos de Supabase y de plataforma
+- Secretos en Secret Manager
+- Bucket privado `ashencrm-files` para archivos de negocio: fotos (`photos/`) y PDFs de cotización (`quotes/`)
 - Presupuesto de facturación con alertas al 50 %, 90 % y 100 %
 
 El frontend sigue en Vercel. Lovable y WhatsApp real siguen fuera de alcance.
 
 ## Uso
 
+La infraestructura ya existe. Para trabajar desde una máquina nueva, sigue
+primero "Shared Terraform state" (abajo). No crees `terraform.tfvars` desde el
+ejemplo ni hagas `apply` sin el estado compartido: Terraform intentaría crear
+todo de nuevo.
+
 ```bash
 cd infra/gcp
-cp terraform.tfvars.example terraform.tfvars
-# completa secretos en terraform.tfvars
-gcloud auth application-default login
-terraform init
+terraform plan    # léelo siempre antes de aplicar
 terraform apply
 ```
 
-Tras el apply, apunta el rewrite de Vercel `/api` a `api_base_url`.
+## Shared Terraform state
+
+The state lives in the private bucket `gs://ashencrm-fx-tfstate` (prefix `gcp/`),
+not on anyone's machine. Nobody pulls it by hand: Terraform reads the latest
+state at the start of every `plan` or `apply` and writes it back at the end.
+While one person is applying, the state is locked, so two people can't apply at
+the same time. The bucket keeps the 20 previous versions of the state, so a bad
+apply can be undone.
+
+1. **Access.** Their Google account needs read/write on the state bucket
+   (`roles/storage.objectAdmin` on `gs://ashencrm-fx-tfstate`, which also holds
+   `terraform.tfvars`), plus the permissions they already used for the first
+   apply. Project Owner/Editor covers all of it.
+2. **Delete their old local copy first.** Remove `infra/gcp/terraform.tfstate`
+   and `infra/gcp/terraform.tfstate.backup` on their machine. Any local copy from
+   before 2026-11-25 is stale: it's missing the SSH-firewall import, the static
+   IP, the database secrets and the recreated VM. If it's still there,
+   `terraform init` offers to upload it into the bucket, which would overwrite
+   the real state.
+3. **One-time setup:**
+   ```bash
+   git pull
+   gcloud auth application-default login
+   cd infra/gcp
+   gcloud storage cp gs://ashencrm-fx-tfstate/tfvars/terraform.tfvars terraform.tfvars
+   terraform init
+   terraform plan    # must say "No changes" unless someone left work unapplied
+   ```
+   After that, a normal `terraform plan` always uses the latest state.
+4. **`terraform.tfvars`.** Terraform doesn't store this file in the state, so it
+   sits next to it in the same private bucket, at `tfvars/terraform.tfvars`
+   (fetched in step 3). The bucket keeps previous versions. If you change a
+   value, upload the new file so everyone gets it:
+   ```bash
+   gcloud storage cp terraform.tfvars gs://ashencrm-fx-tfstate/tfvars/terraform.tfvars
+   ```
+
+Never commit `terraform.tfvars`, `*.tfstate*` or `*.tfplan`. If a crashed run leaves
+the state locked, `terraform force-unlock <LOCK_ID>` (the id is in the error),
+but only when you're sure nobody else is applying.
 
 ## Base de datos (Supabase Postgres)
 
@@ -41,6 +83,7 @@ bash infra/gcp/push_db_secrets.sh ashencrm-fx
 
 El script sube solo URLs de `crm_app` / `crm_readonly` (nunca la de `postgres`)
 y no imprime valores. Sin `ashencrm-database-url` el arranque falla a propósito.
+Tras subir una versión nueva destruye las anteriores.
 
 ## Notas
 

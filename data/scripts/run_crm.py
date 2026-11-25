@@ -58,7 +58,7 @@ def main():
     print("Recarga automatica: API (uvicorn --reload en /backend) + frontend (Vite HMR en :5173).")
     print("En desarrollo abre el dashboard en http://localhost:5173 — el puerto 8000 sirve la API y archivos estaticos sin HMR.")
     
-    # Backend: --reload + --reload-dir solo en `backend` para no reiniciar al escribir en data/*.db
+    # Backend: --reload + --reload-dir solo en `backend` para no reiniciar al escribir en data/*
     backend_cmd = (
         "call .venv\\Scripts\\activate.bat && python -m uvicorn backend.main:app "
         "--reload --reload-dir backend --port 8000"

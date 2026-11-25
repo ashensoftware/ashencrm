@@ -13,6 +13,8 @@ infra/gcp/terraform.tfstate.*
 infra/gcp/terraform.tfvars
 infra/gcp/*.auto.tfvars
 infra/gcp/crash.log
+# Un plan guardado lleva los valores de terraform.tfvars en texto plano.
+infra/gcp/*.tfplan
 __pycache__/
 *.pyc
 *.egg-info/

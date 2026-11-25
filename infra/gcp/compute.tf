@@ -35,6 +35,13 @@ resource "google_compute_firewall" "api_ssh" {
   target_tags   = ["ashencrm-api"]
 }
 
+resource "google_compute_address" "api" {
+  name         = "ashencrm-api-ip"
+  region       = var.region
+  address      = var.api_static_ip
+  address_type = "EXTERNAL"
+}
+
 resource "google_compute_instance" "api" {
   name         = "ashencrm-api"
   machine_type = "e2-micro"
@@ -51,7 +58,9 @@ resource "google_compute_instance" "api" {
 
   network_interface {
     network = "default"
-    access_config {}
+    access_config {
+      nat_ip = google_compute_address.api.address
+    }
   }
 
   service_account {
@@ -59,19 +68,22 @@ resource "google_compute_instance" "api" {
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
 
+  # startup-script en metadata (no metadata_startup_script): cambiar el script
+  # actualiza el VM en el sitio y corre en el siguiente arranque, en vez de recrearlo.
+  # replace(): si el checkout de Windows trae CRLF, bash fallaría en la primera línea.
   metadata = {
     enable-oslogin = "FALSE"
+    startup-script = replace(templatefile("${path.module}/startup.sh.tftpl", {
+      project_id      = var.project_id
+      git_repo        = var.git_repo
+      git_branch      = var.git_branch
+      allowed_origins = var.allowed_origins
+    }), "\r\n", "\n")
   }
-
-  metadata_startup_script = templatefile("${path.module}/startup.sh.tftpl", {
-    project_id      = var.project_id
-    git_repo        = var.git_repo
-    git_branch      = var.git_branch
-    allowed_origins = var.allowed_origins
-  })
 
   depends_on = [
     google_secret_manager_secret_version.app,
+    google_secret_manager_secret.database,
     google_project_iam_member.api_secret_accessor,
   ]
 
